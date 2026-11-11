@@ -1,0 +1,33 @@
+name: Phone-side Python (shim, assembler, driver)
+
+on:
+  push:
+    paths: ['phone/**', 'tools/mkgameframework.py', '.github/workflows/phone-python.yml']
+  workflow_dispatch:
+
+jobs:
+  shim:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/prepare_upstream.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.15'
+      - run: python -m pip install lz4 "capstone>=5,<6"
+      - name: SpirvCross for the native-tool tests
+        run: |
+          native/SpirvCross/build.sh macos out && mkdir -p fw && cp out/libSpirvCross-macos.dylib fw/libSpirvCross.dylib
+          python -m pip install glslang 2>/dev/null || brew install glslang
+          glslangValidator -V tools/testdata/test.frag -o test.spv
+      - name: Shim against nxnative's scripts
+        run: NXB_FRAMEWORKS=$PWD/fw python phone/tests/test_shim.py upstream test.spv
+      - name: Driver through nxnative's build script (no game: must stop at the game scan)
+        run: |
+          mkdir -p nogame && echo x > nogame/readme.txt && echo "x = 00" > nokeys
+          cd phone && NXB_UPSTREAM=$PWD/../upstream NXB_FRAMEWORKS=$PWD/../fw python -c "
+          import sys; from nxbuild import driver
+          lines = []
+          rc = driver.build('../nogame', '../nokeys', '/nonexistent', '../noout', log=lines.append)
+          print('exit code', rc); assert rc == 1"
