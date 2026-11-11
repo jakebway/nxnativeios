@@ -1,7 +1,7 @@
 #!/bin/sh
 # build.sh <ios|macos> <out dir>: SpirvCross at the commit upstream nxnative pins (read from upstream/dm/gfx/tools/spirv_cross_bin/build.sh)
 set -eu
-HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$HERE/../..; OUT=$2; mkdir -p "$OUT"
+HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$HERE/../..; mkdir -p "$2"; OUT=$(cd "$2" && pwd)
 pin=$ROOT/upstream/dm/gfx/tools/spirv_cross_bin/build.sh
 TAG=$(sed -n 's/^TAG=\([^ ]*\).*/\1/p' "$pin"); COMMIT=$(sed -n 's/^COMMIT=\([0-9a-f]*\).*/\1/p' "$pin")
 src=$OUT/src; [ -d "$src" ] || git clone -q --depth 1 --branch "$TAG" https://github.com/KhronosGroup/SPIRV-Cross.git "$src"
