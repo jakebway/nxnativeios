@@ -9,13 +9,14 @@ import plistlib, shutil, subprocess, sys, zipfile, tempfile
 from pathlib import Path
 ipa, out = Path(sys.argv[1]), Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
 NATIVE = {'NxTools.framework', 'SpirvCross.framework', 'capstone.framework', 'Python.framework'}
-def build(name, keep_fw, drop_dirs=(), no_bg=False):
+def build(name, keep_fw, drop_dirs=(), no_bg=False, rename=None):
     with tempfile.TemporaryDirectory() as t:
         t = Path(t); zipfile.ZipFile(ipa).extractall(t)
         app = next((t / 'Payload').glob('*.app'))
         for f in list((app / 'Frameworks').iterdir()):
             if not keep_fw(f.name): shutil.rmtree(f)
         for d in drop_dirs: shutil.rmtree(app / d, ignore_errors=True)
+        if rename: (app / rename[0]).rename(app / rename[1])
         if no_bg:
             p = plistlib.loads((app / 'Info.plist').read_bytes()); p.pop('UIBackgroundModes', None)
             (app / 'Info.plist').write_bytes(plistlib.dumps(p))
@@ -31,3 +32,7 @@ build('D', lambda n: True, ['Resources'], no_bg=True)
 build('E', lambda n: True, [], no_bg=True)            # full, but no background mode (keeps Resources)
 build('F', lambda n: True, ['Resources'])             # full, but no Resources (keeps background mode)
 build('G', lambda n: True, [])                         # the full app again: Resources and background mode, nothing removed
+# bisect inside Resources
+build('H', lambda n: True, ['Resources/nxnative.zip'])          # only the shells
+build('I', lambda n: True, ['Resources/shells'])               # only nxnative.zip
+build('J', lambda n: True, [], rename=('Resources', 'NXData'))  # everything, folder renamed (the app will not find its files: install test only)
