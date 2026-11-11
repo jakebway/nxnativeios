@@ -39,7 +39,7 @@ def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):
     sys.path.insert(0, str(script.parent))
     spec.loader.exec_module(mod)
     _phone_checks(mod)
-    argv = [str(game_dir), '-k', str(keys), '--gpu', 'none', '--allow-other-metal', '--progress', 'json', *extra]
+    argv = [str(game_dir), *(['-k', str(keys)] if keys else []), '--gpu', 'none', '--allow-other-metal', '--progress', 'json', *extra]
     if out_dir: argv += ['--work-dir', str(Path(out_dir) / 'build')]
     return mod.cli(argv)
 

@@ -6,12 +6,12 @@
   <job>/status.json   {"state": "running"|"done"|"failed", "stage": ..., "progress": 0..1, "ipa": ..., "error": ...}
 
 Inputs are .zip files and/or single files (no folder picker): keys are the file named prod.keys (else the one *.keys file), the game
-is every .nsp/.xci/.nsz/.xcz (base game, update, DLC).
+is every .nsp/.xci/.nsz/.xcz (base game, update, DLC), or one .nup file (needs no keys).
 """
 import json, os, re, shutil, subprocess, sys, time, traceback, zipfile
 from pathlib import Path
 
-GAME_EXT = ('.nsp', '.xci', '.nsz', '.xcz')
+GAME_EXT = ('.nsp', '.xci', '.nsz', '.xcz', '.nup')   # .nup: a Switch 2 game in one NUP container (base, updates, DLC); it needs no keys
 
 
 class Job:
@@ -69,6 +69,9 @@ def gather(job, inputs):
                     if not zi.is_dir(): take(zi.filename, lambda zi=zi: z.open(zi))
         else: take(str(p), lambda p=p: open(p, 'rb'))
     keys = sorted(keys_dir.glob('*.keys'), key=lambda k: (k.name.lower() != 'prod.keys', k.name))
+    if not keys and any(f.suffix.lower() == '.nup' for f in game_dir.iterdir()):
+        if not any(game_dir.iterdir()): raise RuntimeError('no game file among the files')
+        return None, game_dir   # a NUP carries no encryption: no keys
     if not keys: raise RuntimeError('no prod.keys among the files (a .keys file, alone or inside a .zip)')
     if not any(game_dir.iterdir()): raise RuntimeError('no game file among the files (.nsp, .xci, .nsz or .xcz, alone or inside a .zip)')
     if len(keys) > 1:   # prod.keys + title.keys (same "name = hex" lines): one combined file, prod.keys first
@@ -84,6 +87,12 @@ def gather(job, inputs):
 def base_title(keys, game_dir, log):
     """The base game's title ID, by nx_extract --contents (the NSP script reads the same lines)"""
     from . import shim
+    nups = [f for f in sorted(game_dir.iterdir()) if f.suffix.lower() == '.nup']
+    if nups:   # a Switch 2 game: the NUP names its own title ID
+        sys.path.insert(0, os.path.join(os.environ['NXB_UPSTREAM'], 'scripts'))
+        import pack_nup
+        app, *_ = pack_nup.scan(pack_nup.Nup(nups[0]))
+        return f'{app:016X}'
     files = [str(f) for f in sorted(game_dir.iterdir()) if f.suffix.lower() in ('.nsp', '.xci')]
     if not files: return None   # NSZ / XCZ: the script converts them first; the shell is checked when the IPA is assembled
     r = subprocess.run(['/nxnativeios/nx_extract', str(keys), '--contents', *files], capture_output=True, text=True)

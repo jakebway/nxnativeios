@@ -12,13 +12,13 @@ struct BuildView: View {
                     Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
                     ForEach(engine.keyFiles, id: \.self) { row($0) }
                 } header: { Text("1. Keys") } footer: {
-                    Text("Pick prod.keys. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both.")
+                    Text("Pick prod.keys. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both. Switch 2 games (.nup) need no keys.")
                 }
                 Section {
                     Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
                     ForEach(engine.gameFiles, id: \.self) { row($0) }
                 } header: { Text("2. Game") } footer: {
-                    Text("Pick the .nsp or .xci (or a .zip of it). Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
+                    Text("Pick the .nsp, .xci or .nup (or a .zip of it). Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
                 }
                 Section {
                     Button { engine.start() } label: {
@@ -26,9 +26,9 @@ struct BuildView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(engine.running || engine.keyFiles.isEmpty || engine.gameFiles.isEmpty)
+                    .disabled(engine.running || !ready)
                 } footer: {
-                    if engine.keyFiles.isEmpty || engine.gameFiles.isEmpty { Text(engine.keyFiles.isEmpty ? "Add your keys first." : "Add a game.") }
+                    if !ready { Text(engine.gameFiles.isEmpty ? "Add a game." : "Add your keys first.") }
                 }
                 if let s = engine.status {
                     Section("Progress") {
@@ -69,6 +69,11 @@ struct BuildView: View {
         .swipeActions { if !engine.running { Button("Remove", role: .destructive) { engine.remove(u) } } }
     }
 
+    /// keys and a game, or a .nup alone (Switch 2 games carry no encryption)
+    private var ready: Bool {
+        !engine.gameFiles.isEmpty && (!engine.keyFiles.isEmpty || engine.gameFiles.contains { ext($0) == "nup" })
+    }
+
     private func ext(_ u: URL) -> String { u.pathExtension.lowercased() }
     private func icon(_ u: URL) -> String { ext(u) == "zip" ? "doc.zipper" : ext(u) == "keys" ? "key.fill" : "gamecontroller.fill" }
     private func kind(_ u: URL) -> String {
@@ -76,7 +81,8 @@ struct BuildView: View {
         case "zip": "zip (keys and game files inside are used)"
         case "keys": u.lastPathComponent.lowercased().hasPrefix("title") ? "title keys" : "console keys"
         case "nsp", "xci", "nsz", "xcz": "game file"
-        default: "not used: only .zip, .keys, .nsp, .xci, .nsz, .xcz"
+        case "nup": "Switch 2 game (no keys needed)"
+        default: "not used: only .zip, .keys, .nsp, .xci, .nsz, .xcz, .nup"
         }
     }
     private func size(_ u: URL) -> String {
