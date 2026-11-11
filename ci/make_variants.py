@@ -3,6 +3,7 @@
   A  Python.framework only (no extra frameworks, no python/ app/ app_packages/ Resources/)
   B  A + the Python module frameworks (no _test*/xxlimited*)
   C  A + NxTools, SpirvCross, capstone
+  E  full app minus UIBackgroundModes only; F  full app minus Resources only
   D  full app, but without UIBackgroundModes and without Resources/ (the 96 MB nxnative.zip and shells)"""
 import plistlib, shutil, subprocess, sys, zipfile, tempfile
 from pathlib import Path
@@ -27,3 +28,5 @@ build('A', lambda n: n == 'Python.framework', ['python', 'app', 'app_packages', 
 build('B', lambda n: n == 'Python.framework' or (n not in NATIVE and not junk(n)), ['Resources'])
 build('C', lambda n: n in NATIVE, ['python', 'app', 'app_packages', 'Resources'])
 build('D', lambda n: True, ['Resources'], no_bg=True)
+build('E', lambda n: True, [], no_bg=True)            # full, but no background mode (keeps Resources)
+build('F', lambda n: True, ['Resources'])             # full, but no Resources (keeps background mode)
