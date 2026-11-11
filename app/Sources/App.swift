@@ -23,7 +23,7 @@ enum Paths {
     static let imports = support.appendingPathComponent("Imports", isDirectory: true)
     static let upstream = support.appendingPathComponent("nxnative", isDirectory: true)
     static let bundle = Bundle.main.bundleURL
-    static let resources = Bundle.main.resourceURL!.appendingPathComponent("Resources")
+    static let resources = Bundle.main.resourceURL!.appendingPathComponent("NXData")
     static func ensure() {
         for d in [ipas, jobs, imports] { try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
     }

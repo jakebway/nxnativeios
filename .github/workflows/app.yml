@@ -42,7 +42,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          R=app/Resources; mkdir -p $R/shells
+          R=app/NXData; mkdir -p $R/shells
           gh release download shells -R "$GITHUB_REPOSITORY" -p 'shell-*.zip' -D $R/shells
           ls $R/shells
           # nxnative as the phone runs it: pristine C# sources (nx_extract / dmsh_xlate --source-sha compare against them), no .git, no Mac executables

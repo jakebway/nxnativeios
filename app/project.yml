@@ -17,7 +17,7 @@ targets:
     sources:
       - path: Sources
       - path: Assets.xcassets
-      - path: Resources
+      - path: NXData
         type: folder
         buildPhase: resources
     dependencies:
