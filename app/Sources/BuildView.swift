@@ -1,13 +1,11 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct BuildView: View {
     @Environment(BuildEngine.self) private var engine
-    private enum Slot { case keys, games }
+    private enum Slot: String, Identifiable { case keys, games; var id: String { rawValue } }
     @State private var slot: Slot?
-    private var importing: Binding<Bool> { Binding(get: { slot != nil }, set: { if !$0 { slot = nil } }) }
-    // .item matches any file, whatever its extension (.keys is not a type iOS knows); .zip is covered too
-    private static let types: [UTType] = [.item, .data]
 
     var body: some View {
         NavigationStack {
@@ -57,9 +55,9 @@ struct BuildView: View {
                 }
             }
             .navigationTitle("NX Builder")
-            .fileImporter(isPresented: importing, allowedContentTypes: Self.types, allowsMultipleSelection: true) { r in
-                let keys = slot == .keys
-                if case .success(let urls) = r { engine.add(urls, keys: keys) }
+            .sheet(item: $slot) { which in
+                // UIKit's own document picker (any file type): SwiftUI's fileImporter misbehaves on iOS 27 betas
+                DocPicker { urls in engine.add(urls, keys: which == .keys) }.ignoresSafeArea()
             }
         }
     }
@@ -90,5 +88,27 @@ struct BuildView: View {
     private func size(_ u: URL) -> String {
         let b = (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         return ByteCountFormatter.string(fromByteCount: Int64(b), countStyle: .file)
+    }
+}
+
+/// UIDocumentPickerViewController for any file (.item: .keys, .nsp, .xci, .zip, ...), opened in place; BuildEngine copies what is picked.
+struct DocPicker: UIViewControllerRepresentable {
+    let onPick: ([URL]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item, .data, .zip], asCopy: false)
+        p.allowsMultipleSelection = true
+        p.delegate = context.coordinator
+        return p
+    }
+    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: DocPicker
+        init(_ p: DocPicker) { parent = p }
+        func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { parent.onPick(urls); parent.dismiss() }
+        func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { parent.dismiss() }
     }
 }
