@@ -50,6 +50,10 @@ jobs:
           for t in dm/tools/nx_extract dm/gfx/tools/dmsh_xlate; do mv phone-up/$t/Program_cs.orig phone-up/$t/Program.cs; done
           rm -f phone-up/dm/tools/nx_extract_bin/nx_extract phone-up/dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate phone-up/dm/gfx/tools/spirv_cross_bin/spirv-cross
           rm -rf phone-up/docs/images
+          # the 159 game profiles are 520 MB; the app only needs the profiles that have a player shell (a big IPA also fails to install)
+          keep=$(ls $R/shells | sed -n 's/^shell-\([0-9A-F]\{16\}\)\.zip$/\1/p')
+          for d in phone-up/dm/games/*/; do b=$(basename $d); if echo "$b" | grep -qE '^[0-9A-F]{16}$' && ! echo "$keep" | grep -qx "$b"; then rm -rf "$d"; fi; done
+          ls phone-up/dm/games
           (cd phone-up && zip -qr -9 ../$R/nxnative.zip .)
           du -sh $R/nxnative.zip $R/shells
       - name: Python packages

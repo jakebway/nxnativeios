@@ -29,11 +29,10 @@ struct BuildView: View {
                         Label(engine.running ? "Building…" : "Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(engine.running || engine.keyFiles.isEmpty || engine.gameFiles.isEmpty)
-                    .listRowBackground(Color.clear)
-                    if engine.keyFiles.isEmpty || engine.gameFiles.isEmpty {
-                        Text(engine.keyFiles.isEmpty ? "Add your keys first." : "Add a game.").font(.caption).foregroundStyle(.secondary)
-                    }
+                } footer: {
+                    if engine.keyFiles.isEmpty || engine.gameFiles.isEmpty { Text(engine.keyFiles.isEmpty ? "Add your keys first." : "Add a game.") }
                 }
                 if let s = engine.status {
                     Section("Progress") {
