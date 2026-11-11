@@ -9,12 +9,19 @@ import os, plistlib, shutil, subprocess, sys
 from pathlib import Path
 
 app, xcfw, pkgs, code = (Path(a).resolve() for a in sys.argv[1:5])
-slice_ = xcfw / 'ios-arm64'
-stdlib = next(p.parent for p in slice_.rglob('os.py') if p.parent.name.startswith('python3'))
+# the pure-Python stdlib (a pythonX.Y folder holding os.py) and the device's binary modules (ios-arm64 lib-dynload) may sit in different folders of the XCframework
+device = lambda p: 'simulator' not in str(p) and 'testbed' not in str(p)
+cands = [p.parent for p in xcfw.rglob('os.py') if p.parent.name.startswith('python3') and device(p)]
+if not cands: sys.exit(f'[RED] no standard library (pythonX.Y/os.py) in {xcfw}: ' + ' '.join(str(p.relative_to(xcfw)) for p in xcfw.glob('*/*')))
+stdlib = sorted(cands, key=lambda p: ('ios-arm64' not in str(p), len(str(p))))[0]
 ver = stdlib.name
+dyn = [d for d in xcfw.rglob('lib-dynload') if device(d) and ver in str(d)]
+print(f'stdlib: {stdlib.relative_to(xcfw)}; lib-dynload: {[str(d.relative_to(xcfw)) for d in dyn]}')
 dst_lib = app / 'python/lib' / ver
 shutil.rmtree(app / 'python', ignore_errors=True)
-shutil.copytree(stdlib, dst_lib, symlinks=False, ignore=shutil.ignore_patterns('__pycache__', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo', 'ensurepip', '*.a'))
+shutil.copytree(stdlib, dst_lib, symlinks=False, ignore=shutil.ignore_patterns('__pycache__', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo', 'ensurepip', '*.a', 'lib-dynload'))
+if not dyn: sys.exit('[RED] no device lib-dynload in the XCframework')
+shutil.copytree(dyn[0], dst_lib / 'lib-dynload', symlinks=False)
 for name, src in (('app_packages', pkgs), ('app', code)):
     shutil.rmtree(app / name, ignore_errors=True); shutil.copytree(src, app / name, ignore=shutil.ignore_patterns('__pycache__'))
 fw_root = app / 'Frameworks'; fw_root.mkdir(exist_ok=True)
