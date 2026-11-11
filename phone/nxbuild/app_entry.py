@@ -188,7 +188,8 @@ def run(job_dir):
     try:
         c = job.cfg
         os.environ['NXB_UPSTREAM'] = str(ensure_upstream(c['upstream_zip'], c['upstream'], job.log))
-        from . import shim, driver
+        from . import capfix, shim, driver
+        capfix.prepare()
         shim.install(log=job.log)
         job.set(stage='reading your files')
         keys, game_dir = gather(job, c['inputs'])
