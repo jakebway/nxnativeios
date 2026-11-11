@@ -1,0 +1,77 @@
+name: Python for the phone
+
+# CPython for iOS (python.org's XCframework) and the native pieces nxnative's build scripts import:
+#   capstone 5 (pure-Python bindings + libcapstone as capstone.framework, found through LIBCAPSTONE_PATH)
+#   lz4 (C extension, cibuildwheel for iOS)
+on:
+  push:
+    paths: ['.github/workflows/pydeps.yml', 'ci/pydeps/**']
+  workflow_dispatch:
+
+env:
+  PY_VERSION: 3.15.2
+  CAPSTONE: capstone>=5,<6
+
+jobs:
+  pydeps:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: CPython iOS XCframework
+        run: |
+          mkdir -p out
+          curl -fL --retry 5 -o py.tgz "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-iOS-XCframework.tar.gz"
+          mkdir py && tar xzf py.tgz -C py
+          find py -maxdepth 3 | head -30
+          fw=$(find py -name Python.xcframework -maxdepth 3 | head -1); echo "XCFW=$fw" >> $GITHUB_ENV
+          dyn=$(find "$fw/ios-arm64" -type d -name lib-dynload | head -1); echo "lib-dynload: $dyn"
+          ls "$dyn" | sed 's/\..*//' | sort -u | tr '\n' ' '; echo
+          for m in zlib _lzma _bz2 _zstd _ctypes mmap _hashlib _struct _json select; do
+            ls "$dyn" | grep -q "^$m\." && echo "have $m" || echo "MISSING $m"
+          done
+      - name: Sources
+        run: |
+          python3 -m pip install --break-system-packages -q cibuildwheel 2>/dev/null || python3 -m pip install -q cibuildwheel
+          python3 -m pip download --no-deps --no-binary :all: "$CAPSTONE" lz4 -d src
+          cd src && for f in *.tar.gz; do tar xzf "$f"; done && ls
+      - name: libcapstone (iOS framework + macOS dylib for the test)
+        run: |
+          cs=$(ls -d src/capstone-*/ | head -1)
+          for p in ios macos; do
+            extra=; [ $p = ios ] && extra="-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"
+            cmake -S "$cs/src" -B "build-cs-$p" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
+              -DCAPSTONE_BUILD_TESTS=OFF -DCAPSTONE_BUILD_CSTOOL=OFF -DCAPSTONE_BUILD_MACOS_THIN=ON -DCMAKE_OSX_ARCHITECTURES=arm64 $extra > /dev/null
+            cmake --build "build-cs-$p" -j 4 > "cs-$p.log" || { tail -30 "cs-$p.log"; exit 1; }
+          done
+          fw=out/capstone.framework; mkdir -p $fw
+          cp -L "$(ls build-cs-ios/libcapstone*.dylib | head -1)" $fw/libcapstone.dylib
+          install_name_tool -id @rpath/capstone.framework/libcapstone.dylib $fw/libcapstone.dylib
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string org.nxnativeios.capstone' -c 'Add :CFBundleExecutable string libcapstone.dylib' \
+            -c 'Add :CFBundlePackageType string FMWK' -c 'Add :CFBundleVersion string 1' -c 'Add :CFBundleShortVersionString string 5' \
+            -c 'Add :MinimumOSVersion string 26.0' $fw/Info.plist
+          otool -l $fw/libcapstone.dylib | grep -A4 LC_BUILD_VERSION
+          codesign -s - -f $fw && codesign -v $fw && du -sh $fw
+          mkdir -p out/site-packages && cp -R "$cs/capstone" out/site-packages/capstone
+          rm -rf out/site-packages/capstone/lib out/site-packages/capstone/include
+          # the same bindings + the macOS build of the same library disassemble an A64 instruction
+          mkdir -p maclib && cp -L "$(ls build-cs-macos/libcapstone*.dylib | head -1)" maclib/libcapstone.dylib
+          LIBCAPSTONE_PATH="$PWD/maclib" PYTHONPATH=out/site-packages python3 -c "
+          import capstone, capstone.arm, capstone.arm64
+          md = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
+          i = next(md.disasm(bytes.fromhex('e00300aa'), 0x1000)); print('capstone', capstone.__version__, i.mnemonic, i.op_str)
+          assert (i.mnemonic, i.op_str) == ('mov', 'x0, x0')"
+      - name: lz4 for iOS (cibuildwheel)
+        env:
+          CIBW_PLATFORM: ios
+          CIBW_ARCHS: arm64_iphoneos
+          CIBW_BUILD: cp315-*
+          CIBW_TEST_SKIP: '*'
+        run: |
+          python3 -m cibuildwheel --output-dir wheels "$(ls -d src/lz4-*/ | head -1)" 2>&1 | tail -40
+          ls -la wheels
+          cd out/site-packages && for w in ../../wheels/*.whl; do unzip -oq "$w"; done && find . -maxdepth 2 -path '*lz4*' | head
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pydeps
+          path: out
