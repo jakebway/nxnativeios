@@ -2,6 +2,8 @@
 # Clone nxnative at $NXNATIVE_COMMIT (default: HEAD) into ./upstream, apply patches/, and prepare the C# sources for the library builds.
 set -eu
 [ -d upstream/.git ] || git clone -q https://github.com/seedds/nxnative.git upstream
+pin=$(cd "$(dirname "$0")" && pwd)/nxnative.commit
+[ -n "${NXNATIVE_COMMIT:-}" ] || { [ ! -f "$pin" ] || NXNATIVE_COMMIT=$(cat "$pin"); }   # the one commit the app, the shells and the patches are tested with
 [ -z "${NXNATIVE_COMMIT:-}" ] || git -C upstream checkout -q "$NXNATIVE_COMMIT"
 git -C upstream apply "$PWD"/patches/*.patch
 # Each C# tool: keep the original (for --source-sha), make Main internal, give its embedded sources their own resource names (both tools live in one assembly)
