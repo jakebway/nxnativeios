@@ -1,0 +1,85 @@
+name: Builder app IPA
+
+# NX Builder: the iPhone app that builds game IPAs on the phone. Unsigned; sign and install it with FlareStore.
+on:
+  workflow_dispatch:
+  push:
+    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', '.github/workflows/app.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    uses: ./.github/workflows/native.yml
+  pydeps:
+    uses: ./.github/workflows/pydeps.yml
+
+  app:
+    needs: [native, pydeps]
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      PY_VERSION: 3.15.2
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/prepare_upstream.sh
+      - uses: actions/download-artifact@v4
+        with: { path: art }
+      - name: Frameworks
+        run: |
+          set -eu
+          F=app/Frameworks; mkdir -p $F
+          for z in art/NxTools.framework/NxTools.framework.zip art/SpirvCross.framework/SpirvCross.framework.zip; do ditto -x -k "$z" $F; done
+          cp -R art/pydeps/capstone.framework $F/
+          curl -fL --retry 5 -o py.tgz "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-iOS-XCframework.tar.gz"
+          mkdir py && tar xzf py.tgz -C py
+          xc=$(find py -maxdepth 2 -name Python.xcframework -not -path '*testbed*' | head -1); [ -n "$xc" ] || xc=$(find py -name Python.xcframework | head -1)
+          cp -R "$xc" $F/Python.xcframework
+          ls $F; ls $F/Python.xcframework
+      - name: Resources (nxnative for the phone, player shells)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          R=app/Resources; mkdir -p $R/shells
+          gh release download shells -R "$GITHUB_REPOSITORY" -p 'shell-*.zip' -D $R/shells
+          ls $R/shells
+          # nxnative as the phone runs it: pristine C# sources (nx_extract / dmsh_xlate --source-sha compare against them), no .git, no Mac executables
+          rm -rf phone-up && cp -R upstream phone-up && rm -rf phone-up/.git
+          for t in dm/tools/nx_extract dm/gfx/tools/dmsh_xlate; do mv phone-up/$t/Program_cs.orig phone-up/$t/Program.cs; done
+          rm -f phone-up/dm/tools/nx_extract_bin/nx_extract phone-up/dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate phone-up/dm/gfx/tools/spirv_cross_bin/spirv-cross
+          rm -rf phone-up/docs/images
+          (cd phone-up && zip -qr -9 ../$R/nxnative.zip .)
+          du -sh $R/nxnative.zip $R/shells
+      - name: Python packages
+        run: |
+          set -eu
+          mkdir -p pyapp/app_packages pyapp/app
+          cp -R art/pydeps/site-packages/. pyapp/app_packages/
+          cp -R phone/nxbuild pyapp/app/nxbuild && cp tools/mkgameframework.py pyapp/app/nxbuild/
+          find pyapp -name '*.so' | head
+      - name: Build
+        run: |
+          set -eu
+          command -v xcodegen || brew install xcodegen
+          cd app && xcodegen generate
+          xcodebuild -project NXBuilder.xcodeproj -scheme NXBuilder -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ../build.log | grep -E 'error:|warning: .*Swift|BUILD' || true
+          grep -q 'BUILD SUCCEEDED' ../build.log
+      - name: Python into the app, IPA
+        run: |
+          set -eu
+          appdir=$(find "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' | head -1)
+          python3 ci/install_python.py "$appdir" app/Frameworks/Python.xcframework pyapp/app_packages pyapp/app
+          ls "$appdir"; ls "$appdir/Frameworks" | head -50; du -sh "$appdir"
+          mkdir -p out/Payload && cp -R "$appdir" out/Payload/
+          (cd out && zip -qr -y NXBuilder.ipa Payload) && ls -la out/NXBuilder.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NXBuilder-ipa
+          path: out/NXBuilder.ipa
+          compression-level: 0
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: app-build-log, path: build.log }

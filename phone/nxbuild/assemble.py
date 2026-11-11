@@ -92,7 +92,17 @@ def assemble(out_ipa, log=None):
     if e.get('PROGRAMS_TSV'): raise AssembleError('games of several programs are not supported on the phone yet')
     game, patched, romfs, msl_ios = e['GAME'], Path(e['PATCHED']), Path(e['ROMFS']), Path(e['MSL_IOS'])
     gfx = e.get('GFXAPI') or 'nvn'
-    shell = Path(e['NXB_SHELL'])
+    if e.get('NXB_SHELL') and e['NXB_SHELL'] != 'None': shell = Path(e['NXB_SHELL'])
+    else:   # the bundled shell for this game: shell-<title ID>.zip (release "shells"), unpacked once per build
+        z = Path(e.get('NXB_SHELLS', '')) / f'shell-{game.upper()}.zip'
+        if not z.is_file(): raise AssembleError(f'no player shell for {game} ({z.name}): add the title ID to the "Player shells" workflow and rebuild the app')
+        dst = Path(e.get('W') or out_ipa.parent / 'ipa-work') / 'shell'; shutil.rmtree(dst, ignore_errors=True)
+        with zipfile.ZipFile(z) as zf: zf.extractall(dst)
+        apps = list((dst / 'Payload').glob('*.app'))
+        if len(apps) != 1: raise AssembleError(f'{z.name} holds no app')
+        shell = apps[0]
+        for f in shell.rglob('*'):   # zipfile does not keep the executable bit
+            if f.is_file() and f.name in ('DmIOS',): f.chmod(0o755)
     info_shell = shell / 'nxshell.json'
     if info_shell.is_file():
         import json; meta = json.loads(info_shell.read_text())

@@ -5,6 +5,7 @@ on:
   push:
     paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   nxtools:

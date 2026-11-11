@@ -7,6 +7,7 @@ on:
   push:
     paths: ['.github/workflows/pydeps.yml', 'ci/pydeps/**']
   workflow_dispatch:
+  workflow_call:
 
 env:
   PY_VERSION: 3.15.2

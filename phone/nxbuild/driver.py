@@ -30,7 +30,7 @@ def _phone_checks(mod):
 def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):
     repo = upstream()
     shim.install(log=log)
-    os.environ['NXB_SHELL'] = str(shell_app)
+    os.environ['NXB_SHELL'] = str(shell_app) if shell_app else ''
     os.environ['NXB_UPSTREAM'] = str(repo)
     os.environ.setdefault('PATH', '/usr/bin:/bin')
     script = repo / 'scripts/build_ipa_from_nsp.py'
