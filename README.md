@@ -1,4 +1,4 @@
-# NXBuilder
+# nxnativeios
 
 An iPhone app that turns your own Switch game (NSP + `prod.keys`) into a native nxnative game IPA, entirely on the phone. The IPA is then signed and installed with FlareStore.
 
