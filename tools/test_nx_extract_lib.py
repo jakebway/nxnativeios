@@ -16,7 +16,7 @@ rc, out = run()
 print('no args ->', rc, out[:1])
 assert rc == 2 and out and out[0].startswith('usage: nx_extract')
 rc, out = run('--source-sha')
-want = hashlib.sha256((up / 'dm/tools/nx_extract/Program.cs.orig').read_bytes() + (up / 'dm/tools/nx_extract/nx_extract.csproj').read_bytes()).hexdigest()[:16]
+want = hashlib.sha256((up / 'dm/tools/nx_extract/Program_cs.orig').read_bytes() + (up / 'dm/tools/nx_extract/nx_extract.csproj').read_bytes()).hexdigest()[:16]
 print('source-sha', rc, out, 'want', want)
 for l in out: print('  ', l)
 assert rc == 0 and out == [want]
