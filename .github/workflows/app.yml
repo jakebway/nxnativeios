@@ -4,7 +4,7 @@ name: Builder app IPA
 on:
   workflow_dispatch:
   push:
-    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', 'ci/audit_ipa.py', 'ci/make_icon.py', '.github/workflows/app.yml']
+    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', 'ci/make_variants.py', 'ci/audit_ipa.py', 'ci/make_icon.py', '.github/workflows/app.yml']
 
 permissions:
   contents: write
@@ -96,6 +96,13 @@ jobs:
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -q --force origin HEAD:refs/heads/ipa-audit
           exit $rc
+      - name: Install-bisect variants (release "diag")
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 ci/make_variants.py out/NXBuilder.ipa out/variants
+          gh release view diag >/dev/null 2>&1 || gh release create diag --title "Install bisect" --notes "A=Python only, B=A+py modules, C=A+native frameworks, D=full minus Resources and background mode"
+          gh release upload diag out/variants/*.ipa --clobber
       - name: Publish to the "builder" release
         env:
           GH_TOKEN: ${{ github.token }}

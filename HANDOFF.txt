@@ -1,0 +1,80 @@
+HANDOFF: nxnativeios (NX Builder) - read this first
+====================================================
+
+GOAL
+An iPhone app ("NX Builder") that runs fully on the phone, no Mac. The user picks prod.keys, title.keys,
+game NSP/XCI etc. (as .zip or as individual files; NEVER a folder picker, it fails for this user),
+and the app builds a per-game, unsigned IPA. The user signs and installs that IPA with FlareStore
+(each game gets its own icon). The app also has an "IPAs" tab (list, share to FlareStore, rename, delete, import).
+Based on seedds/nxnative (github.com/seedds/nxnative), which normally needs a Mac to build.
+Repo: github.com/jakebway/nxnativeios (local clone was /home/claude/nxnativeios; upstream clone /home/claude/src/nxnative).
+
+USER CONTEXT
+- No Mac. Builds happen only on GitHub Actions (runner labels that work: xcode-27, macos-26).
+- FlareStore signs/installs unsigned IPAs. Phone must be iOS 26+ (games need Metal 4); builder targets iOS 26.0 too.
+- In the sandbox: `gh` GraphQL, `gh workflow run` and artifact downloads are blocked. Use REST:
+  gh api -X POST repos/jakebway/nxnativeios/actions/workflows/<file>/dispatches -f ref=main
+  and read job logs. Release-asset downloads untested.
+- User asked to be told when the HARD parts work (on-device shaders + Python build scripts end to end)
+  so they can switch to a cheaper model. That has NOT been reached/proven yet.
+
+STATE (as of last session)
+- Commit 50b615f pushed: self-test in Settings (Run self-test / Share report) + app.yml now publishes
+  out/NXBuilder.ipa to a GitHub release tagged "builder" (the run for that commit may still be in progress).
+- Uncommitted local edits at the time of writing: app icon (app/Assets.xcassets/AppIcon.appiconset/icon-1024.png,
+  generated with PIL), project.yml adds Assets.xcassets + ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon.
+  Check `git status`; commit them if present. (A temporary 17.0 deployment target change was reverted to 26.0.)
+
+OPEN PROBLEMS (from the user, latest)
+1. NXBuilder.ipa was built but iOS/FlareStore FAILED TO INSTALL it. Cause unknown. Do this:
+   - Get the IPA (release "builder" asset, or Actions artifact via the user) and inspect it: unzip, check
+     every Mach-O is inside a *.framework with Info.plist (CFBundleExecutable/Identifier/MinimumOSVersion/
+     CFBundleSupportedPlatforms) and no stray .so/.dylib/executables elsewhere (lz4/capstone/stdlib dirs);
+     check each framework's LC_BUILD_VERSION platform is iOS (not macOS) and minos <= 26.0; unique bundle IDs;
+     no oddities like the ".origin" files inside frameworks, symlinks, or unusual names; app Info.plist has
+     CFBundleExecutable, CFBundleIdentifier, MinimumOSVersion, UIDeviceFamily, DTPlatformName.
+   - Ask the user for the exact FlareStore/iOS error text. Remove UIBackgroundModes "processing" if it causes trouble.
+   - Possible fixes: put every Mach-O into proper frameworks, strip stray files, fix plists, lower risk items one by one.
+2. Needs an app ICON: done in the uncommitted edit above (asset catalog); verify the built Info.plist has CFBundleIcons
+   and the 1024 PNG has no alpha. Game IPAs get their own icons from assemble.py (PNG icons, untested).
+
+ARCHITECTURE (details in docs/DESIGN.md, README.md status checklist)
+- App = SwiftUI (app/Sources: App, BuildEngine, BuildView, IPAsView, SettingsView, PythonBridge.h/.m) embedding
+  CPython 3.15.2 (python.org iOS XCframework). Binary .so modules become frameworks + .fwork files
+  (ci/install_python.py, PEP 730). Extra libs: lz4, capstone 5 (libcapstone framework via LIBCAPSTONE_PATH).
+- Python side: phone/nxbuild/{app_entry.py, driver.py, assemble.py, shim.py, selftest.py}.
+  shim.py replaces subprocess.Popen so upstream scripts run in-process (python scripts via runpy; nx_extract,
+  dmsh_xlate, spirv-cross via frameworks; xcrun metal/metallib are MSL source passthrough; zstd via compression.zstd;
+  multiprocessing pools -> thread pools). driver.py loads upstream scripts/build_ipa_from_nsp.py.
+  assemble.py replaces dm/ios/tools/build_ipa.sh (shell + NXGame.framework + tables + romfs.img + msl + Info.plist + icons).
+- Native frameworks (CI): NxTools.framework (NativeAOT C#: nx_extract_main, dmsh_xlate_main),
+  SpirvCross.framework (spirv_cross_main), capstone.framework. Workflows: native.yml, pydeps.yml, phone-python.yml,
+  proof.yml, shells.yml, app.yml.
+- Game code without a compiler: tools/mkgameframework.py writes NXGame.framework (Mach-O dylib, pure Python, unsigned).
+  patches/0001 makes main.m dlopen it; patches/0002 compiles MSL source shaders on device
+  (newLibraryWithSource) because phones have no offline Metal compiler.
+- Player shells (game-less engine per title profile) are built by shells.yml and uploaded to release "shells";
+  the app workflow bundles all shell-*.zip. Default shells: 010015100B514000, 0100535012974000, 010014E00DB56000.
+  Add more profiles as the user asks (about 159 profiles upstream; only games with a registered profile work in v1).
+
+NOT YET VERIFIED ANYWHERE
+- The app has never run on a device (this install failure is the first blocker).
+- assemble.py never run on a real game; shim framework loading on iOS; on-device MSL compile (flag differences:
+  no -O1, -fwrapv, -fbracket-depth); DM_ALLOW_OTHER_METAL=1 bypass of upstream's Metal compiler lock;
+  first-launch shader compile time; memory/time on a phone for multi-GB games.
+- Fonts: dm/font/standard.ttf and nintendo_ext.ttf are still not produced on device (build_ipa.sh used a macOS font +
+  make_ext_font.py).
+- Not supported in v1: games needing Mac-host boots (heap/region checks, run-time shader capture, jit_capture),
+  NSZ/XCZ (later; nsz is Python/zstandard), multi-program games, resuming builds after iOS suspends the app.
+
+NEXT STEPS (in order)
+1. Fix the install failure (see above), push, rebuild via app.yml, give the user the release link.
+2. Have the user install, open Settings > Run self-test, and share the report (Python, zstd, lz4, capstone,
+   NxTools, SpirvCross, framework writer, nxnative unpack should all pass).
+3. Run a real game build on phone with a registered-profile game; fix failures in shim/assemble/driver.
+4. Fonts, icons, more shells, NSZ/XCZ, background/resume handling.
+Tell the user when steps 2 and 3 work end to end: that is the "hard part is done" milestone.
+
+COMMIT FOOTER USED
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011vxyUcxwTmz5NP2yXwgw54
