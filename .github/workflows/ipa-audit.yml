@@ -1,0 +1,87 @@
+name: Audit published builder IPA
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/ipa-audit.yml']
+permissions:
+  contents: write
+jobs:
+  audit:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download existing IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download builder --pattern NXBuilder.ipa --dir audit-input
+      - name: Inspect archive without changing it
+        run: |
+          mkdir -p report
+          python3 - <<'PY' > report/ipa-audit.txt 2>&1
+          import collections, hashlib, os, pathlib, plistlib, stat, subprocess, zipfile
+          ipa = pathlib.Path('audit-input/NXBuilder.ipa')
+          print('IPA SHA256:', hashlib.sha256(ipa.read_bytes()).hexdigest())
+          print('SOURCE COMMIT:', os.environ.get('GITHUB_SHA'))
+          print('RUN:', os.environ.get('GITHUB_RUN_ID'))
+          with zipfile.ZipFile(ipa) as z:
+              print('ZIP CRC CHECK:', z.testzip())
+              print('\nARCHIVE INVENTORY')
+              for i in z.infolist():
+                  mode = i.external_attr >> 16
+                  print(i.file_size, oct(mode), 'SYMLINK' if stat.S_ISLNK(mode) else '', i.filename)
+              z.extractall('unpacked')
+          root = pathlib.Path('unpacked')
+          ids = collections.defaultdict(list)
+          print('\nALL BUNDLE PLISTS')
+          for p in sorted(root.rglob('Info.plist')):
+              print('\nPLIST:', p)
+              try:
+                  data = plistlib.loads(p.read_bytes())
+                  print(plistlib.dumps(data, fmt=plistlib.FMT_XML).decode())
+                  if data.get('CFBundleIdentifier'):
+                      ids[data['CFBundleIdentifier']].append(str(p))
+                  exe = data.get('CFBundleExecutable')
+                  if exe and not (p.parent / exe).is_file():
+                      print('WARNING: declared executable missing:', exe)
+              except Exception as e:
+                  print('PLIST ERROR:', repr(e))
+          print('\nDUPLICATE BUNDLE IDS')
+          for key, paths in ids.items():
+              if len(paths) > 1:
+                  print(key, paths)
+          magic = {bytes.fromhex(h) for h in ['feedface','cefaedfe','feedfacf','cffaedfe','cafebabe','bebafeca','cafebabf','bfbafeca']}
+          print('\nMACH-O AUDIT')
+          for p in sorted(root.rglob('*')):
+              if not p.is_file():
+                  continue
+              with p.open('rb') as f:
+                  header = f.read(4)
+              if header not in magic:
+                  continue
+              print('\nBINARY:', p)
+              frameworks = [a for a in p.parents if a.suffix == '.framework']
+              if not frameworks and p.parent.suffix != '.app':
+                  print('WARNING: Mach-O outside framework or app executable location')
+              for cmd in [['file', str(p)], ['otool', '-l', str(p)], ['otool', '-L', str(p)], ['codesign', '-dvv', str(p)]]:
+                  print('COMMAND:', ' '.join(cmd))
+                  result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  print(result.stdout)
+                  print('EXIT:', result.returncode)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa-audit-report
+          path: report/ipa-audit.txt
+      - name: Publish readable report on separate branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd report
+          git init -b ipa-audit
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ipa-audit.txt
+          git commit -m "IPA audit for run $GITHUB_RUN_ID"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --force origin HEAD:refs/heads/ipa-audit
