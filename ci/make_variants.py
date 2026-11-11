@@ -30,3 +30,4 @@ build('C', lambda n: n in NATIVE, ['python', 'app', 'app_packages', 'Resources']
 build('D', lambda n: True, ['Resources'], no_bg=True)
 build('E', lambda n: True, [], no_bg=True)            # full, but no background mode (keeps Resources)
 build('F', lambda n: True, ['Resources'])             # full, but no Resources (keeps background mode)
+build('G', lambda n: True, [])                         # the full app again: Resources and background mode, nothing removed

@@ -101,7 +101,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 ci/make_variants.py out/NXBuilder.ipa out/variants
-          gh release view diag >/dev/null 2>&1 || gh release create diag --title "Install bisect" --notes "A=Python only, B=A+py modules, C=A+native frameworks, D=full minus Resources and background mode, E=full minus background mode, F=full minus Resources"
+          gh release view diag >/dev/null 2>&1 || gh release create diag --title "Install bisect" --notes "A=Python only, B=A+py modules, C=A+native frameworks, D=full minus Resources and background mode, E=full minus background mode, F=full minus Resources, G=full (again)"
           gh release upload diag out/variants/*.ipa --clobber
       - name: Publish to the "builder" release
         env:
