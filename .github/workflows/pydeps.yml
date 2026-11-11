@@ -39,7 +39,7 @@ jobs:
         run: |
           cs=$(ls -d src/capstone-*/ | head -1)
           for p in ios macos; do
-            extra=; [ $p = ios ] && extra="-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"
+            extra=; [ $p = ios ] && extra="-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_SYSTEM_PROCESSOR=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=26.0"
             cmake -S "$cs/src" -B "build-cs-$p" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
               -DCAPSTONE_BUILD_TESTS=OFF -DCAPSTONE_BUILD_CSTOOL=OFF -DCAPSTONE_BUILD_MACOS_THIN=ON -DCMAKE_OSX_ARCHITECTURES=arm64 $extra > /dev/null
             cmake --build "build-cs-$p" -j 4 > "cs-$p.log" || { tail -30 "cs-$p.log"; exit 1; }
