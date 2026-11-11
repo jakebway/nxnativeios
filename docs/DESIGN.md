@@ -44,10 +44,11 @@ FlareStore must keep the **Increased Memory Limit** entitlement (`build_ipa.sh` 
 
 ## On-device shader compile: known differences from the offline build
 
-Offline flags (`dmsh_build.py MAC_METAL`, `ios_metal.py`): `-O1 -fpreserve-invariance -fwrapv -fbracket-depth=1024`, deployment target.
+Offline iOS flags (`dm/ios/tools/ios_metal.py METAL`): `-O1 -mios-version-min=18.0 -fmetal-math-mode=relaxed -fpreserve-invariance -fwrapv -fbracket-depth=1024`.
 
 - `-fpreserve-invariance` → `MTLCompileOptions.preserveInvariance = YES`. Same.
-- Fast math: on in both by default. Same.
+- `-fmetal-math-mode=relaxed` → `mathMode = MTLMathModeRelaxed`. Same (keeps the translated shaders' isnan selects; upstream: black bands on an A20 Pro without it).
+- `-mios-version-min=18.0` → `languageVersion = MTLLanguageVersion3_2`.
 - `-O1`: no runtime equivalent. Default optimization; upstream notes `-O2` folding made Odyssey's `alRenderMaterialUber` take 25 min / 17.3 MB vs 31 s / 1.3 MB. Watch first-launch compile times.
 - `-fwrapv`: no runtime equivalent. Signed overflow is undefined in MSL; upstream traced Ocarina of Time's mesh shader lighting band to it. Fix later in the translator output (do the arithmetic in unsigned) if a game shows it.
 - `-fbracket-depth=1024`: no runtime equivalent; sources nesting > 256 fail to compile (upstream: two OoT compute shaders).

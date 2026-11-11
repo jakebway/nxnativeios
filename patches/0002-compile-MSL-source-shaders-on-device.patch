@@ -1,14 +1,15 @@
 diff --git a/dm/gfx/nvn/nvn_mtl.m b/dm/gfx/nvn/nvn_mtl.m
-index 21cff4c..fd93151 100644
+index 21cff4c..f4c68b4 100644
 --- a/dm/gfx/nvn/nvn_mtl.m
 +++ b/dm/gfx/nvn/nvn_mtl.m
-@@ -6012,6 +6012,21 @@ static NSString *lib_name(NSString *path) {
+@@ -6012,6 +6012,22 @@ static NSString *lib_name(NSString *path) {
      NSString *dir = g_msl_dir ? [g_msl_dir stringByAppendingString:@"/"] : nil;
      return dir && [path hasPrefix:dir] ? [path substringFromIndex:dir.length] : path.lastPathComponent;
  }
 +// nxnativeios: a shader built on the iPhone has no offline Metal compiler, so its "library" file holds the MSL source (the builder writes it in place of the .metallib).
-+// A file that does not start with the metallib magic is compiled here, with the offline flags that have a runtime equivalent: -fpreserve-invariance (preserveInvariance)
-+// and fast math (the offline default, also the runtime default). -O1, -fwrapv and -fbracket-depth have none: see the nxnativeios README. Metal keeps compiled source in its own cache.
++// A file that does not start with the metallib magic is compiled here, with the iOS chain's flags (dm/ios/tools/ios_metal.py METAL) that have a runtime equivalent:
++// -fmetal-math-mode=relaxed (mathMode), -fpreserve-invariance (preserveInvariance), -mios-version-min=18.0 (Metal 3.2). -O1, -fwrapv and -fbracket-depth have none:
++// see nxnativeios docs/DESIGN.md. Metal keeps compiled source in its own cache.
 +static id<MTLLibrary> lib_from_data(dispatch_data_t d, NSError **err) {
 +    // The data is one mapping (lib_from_file_), so the map is the same bytes, not a copy
 +    const void *buf = NULL; size_t len = 0; dispatch_data_t flat = dispatch_data_create_map(d, &buf, &len);
@@ -16,7 +17,7 @@ index 21cff4c..fd93151 100644
 +    NSString *src = [[NSString alloc] initWithBytes:buf length:len encoding:NSUTF8StringEncoding];
 +    if (!src) { if (err) *err = [NSError errorWithDomain:@"nxnativeios" code:1 userInfo:@{NSLocalizedDescriptionKey: @"shader file is neither a metallib nor UTF-8 MSL"}]; return nil; }
 +    static MTLCompileOptions *opt; static dispatch_once_t once;
-+    dispatch_once(&once, ^{ opt = [MTLCompileOptions new]; opt.preserveInvariance = YES; });
++    dispatch_once(&once, ^{ opt = [MTLCompileOptions new]; opt.preserveInvariance = YES; opt.mathMode = MTLMathModeRelaxed; opt.languageVersion = MTLLanguageVersion3_2; });
 +    static _Atomic long n_src; long k = atomic_fetch_add(&n_src, 1);
 +    if (!k) MLOG("shaders: compiling MSL source on this device (nxnativeios build)");
 +    return [g_dev newLibraryWithSource:src options:opt error:err];
@@ -24,7 +25,7 @@ index 21cff4c..fd93151 100644
  static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err);
  static id<MTLLibrary> lib_from_file(NSString *path, NSError **err) { return lib_tag(lib_from_file_(path, err), lib_name(path)); }
  static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
-@@ -6021,7 +6036,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
+@@ -6021,7 +6037,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
          if (x && msl_image_map(img, x, &f)) {
              void *base = f.base; size_t base_len = f.base_len;
              dispatch_data_t d = dispatch_data_create(f.data, f.size, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ munmap(base, base_len); });
@@ -33,7 +34,7 @@ index 21cff4c..fd93151 100644
          }
          if (!x) errno = open_errno;
      }
-@@ -6029,7 +6044,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
+@@ -6029,7 +6045,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
      size_t len = (size_t)st.st_size; void *m = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
      if (m == MAP_FAILED) { if (err) *err = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"mmap failed %@", path]}]; return nil; }
      dispatch_data_t d = dispatch_data_create(m, len, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ munmap(m, len); });
