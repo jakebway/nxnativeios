@@ -111,6 +111,7 @@ jobs:
           gh release upload builder out/NXBuilder.ipa --clobber
           gh release edit builder --notes "The builder app, built from $(git rev-parse --short HEAD) with nxnative $(git -C upstream rev-parse --short HEAD). Install with FlareStore."
       - uses: actions/upload-artifact@v4
+        continue-on-error: true   # the release is the delivery; the artifact quota can run out
         with:
           name: NXBuilder-ipa
           path: out/NXBuilder.ipa
