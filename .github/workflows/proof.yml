@@ -1,0 +1,23 @@
+name: Proof - game framework
+
+on: [push, workflow_dispatch]
+
+jobs:
+  framework:
+    name: Framework writer (dlopen + getsectiondata on macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --break-system-packages lief || python3 -m pip install lief
+      - run: python3 tools/test_mkgameframework.py
+      - run: python3 tools/test_mkgameframework.py --dlopen
+
+  shell:
+    name: nxnative iOS sources compile with the framework patch
+    runs-on: xcode-27
+    continue-on-error: true   # the xcode-27 image may not be available to this account
+    steps:
+      - uses: actions/checkout@v4
+      - run: git clone --depth 1 https://github.com/seedds/nxnative.git upstream
+      - run: cd upstream && git apply ../patches/*.patch
+      - run: cd upstream && python3 dm/ios/tools/compile_check.py
