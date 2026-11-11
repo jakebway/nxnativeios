@@ -10,10 +10,13 @@ Built on [nxnative](https://github.com/seedds/nxnative) (MIT). No game files or 
 - **Settings**
 
 ## Status
-- [x] `tools/mkgameframework.py`: writes the game's rewritten code as `NXGame.framework` with no compiler (replaces nxnative's `gen_embed.py` + clang/ld)
-- [x] `patches/0001`: nxnative's iOS app loads game code from `NXGame.framework`
-- [ ] CI: per-profile player shells (no game data)
-- [ ] On-device extraction (keys + NSP)
-- [ ] On-device rewriter (embedded Python)
-- [ ] On-device shaders (runtime Metal compile)
+See [docs/DESIGN.md](docs/DESIGN.md) for the whole pipeline.
+- [x] `tools/mkgameframework.py`: the game's rewritten code as `NXGame.framework` with no compiler
+- [x] `patches/0001`: the game app loads its code from `NXGame.framework`
+- [x] `patches/0002`: the game app compiles MSL source shaders on the phone
+- [x] CI: per-profile player shells (no game data), release `shells`
+- [x] `NxTools.framework`: NSP/XCI extraction (your `prod.keys`) and shader translation
+- [x] `SpirvCross.framework`: SPIR-V to Metal source
+- [ ] Embedded Python + nxnative's build scripts on the phone
+- [ ] Game IPA assembler (replaces xcodebuild)
 - [ ] Builder app UI (Build / IPAs / Settings)
