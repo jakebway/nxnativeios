@@ -18,6 +18,11 @@ case $1 in
   macos) cc="xcrun --sdk macosx clang++ -arch arm64" ;;
 esac
 mkdir -p "$OUT/obj-$1"
-echo "$objs" | xargs -P 4 -I{} sh -c "$cc -std=c++11 -O2 -fPIC -w -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -DRARDLL -c {} -o '$OUT/obj-$1/'\$(basename {} .cpp).o"
+cat > "$OUT/cc-$1.sh" <<EOS
+#!/bin/sh
+f=\$1; exec $cc -std=c++11 -O2 -fPIC -w -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -DRARDLL -c "\$f" -o "$OUT/obj-$1/\$(basename "\$f" .cpp).o"
+EOS
+chmod +x "$OUT/cc-$1.sh"
+echo "$objs" | xargs -n1 -P4 "$OUT/cc-$1.sh"
 $cc -dynamiclib -o "$OUT/libUnrar-$1.dylib" "$OUT"/obj-$1/*.o -install_name @rpath/Unrar.framework/Unrar
 nm -gU "$OUT/libUnrar-$1.dylib" | grep -E '_RAR(OpenArchiveEx|ReadHeaderEx|ProcessFile|CloseArchive|GetDllVersion)$'
