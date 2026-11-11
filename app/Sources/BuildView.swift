@@ -4,20 +4,18 @@ import UniformTypeIdentifiers
 
 struct BuildView: View {
     @Environment(BuildEngine.self) private var engine
-    private enum Slot: String, Identifiable { case keys, games; var id: String { rawValue } }
-    @State private var slot: Slot?
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button { slot = .keys } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
+                    Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
                     ForEach(engine.keyFiles, id: \.self) { row($0) }
                 } header: { Text("1. Keys") } footer: {
                     Text("Pick prod.keys. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both.")
                 }
                 Section {
-                    Button { slot = .games } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
+                    Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
                     ForEach(engine.gameFiles, id: \.self) { row($0) }
                 } header: { Text("2. Game") } footer: {
                     Text("Pick the .nsp or .xci (or a .zip of it). Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
@@ -54,11 +52,7 @@ struct BuildView: View {
                     }
                 }
             }
-            .navigationTitle("NX Builder")
-            .sheet(item: $slot) { which in
-                // UIKit's own document picker (any file type): SwiftUI's fileImporter misbehaves on iOS 27 betas
-                DocPicker { urls in engine.add(urls, keys: which == .keys) }.ignoresSafeArea()
-            }
+            .navigationTitle("NXnativeiOS")
         }
     }
 
@@ -91,24 +85,27 @@ struct BuildView: View {
     }
 }
 
-/// UIDocumentPickerViewController for any file (.item: .keys, .nsp, .xci, .zip, ...), opened in place; BuildEngine copies what is picked.
-struct DocPicker: UIViewControllerRepresentable {
-    let onPick: ([URL]) -> Void
-    @Environment(\.dismiss) private var dismiss
+/// UIKit's document picker, presented straight from the top view controller (inside a SwiftUI sheet its Open button did nothing on iOS 27 beta).
+/// asCopy: the picker copies the chosen files into the app's inbox itself (with its own progress), so there is no security-scoped access to manage.
+@MainActor
+enum DocPicker {
+    private static var holder: Delegate?
 
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item, .data, .zip], asCopy: false)
+    static func present(onPick: @escaping ([URL]) -> Void) {
+        let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item, .data, .zip], asCopy: true)
         p.allowsMultipleSelection = true
-        p.delegate = context.coordinator
-        return p
+        let d = Delegate(onPick); holder = d; p.delegate = d
+        var top = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }?.rootViewController
+        while let n = top?.presentedViewController { top = n }
+        top?.present(p, animated: true)
     }
-    func updateUIViewController(_ vc: UIDocumentPickerViewController, context: Context) {}
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let parent: DocPicker
-        init(_ p: DocPicker) { parent = p }
-        func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { parent.onPick(urls); parent.dismiss() }
-        func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { parent.dismiss() }
+    private final class Delegate: NSObject, UIDocumentPickerDelegate {
+        let onPick: ([URL]) -> Void
+        init(_ f: @escaping ([URL]) -> Void) { onPick = f }
+        func documentPicker(_ c: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            Task { @MainActor in onPick(urls); DocPicker.holder = nil }
+        }
+        func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { Task { @MainActor in DocPicker.holder = nil } }
     }
 }

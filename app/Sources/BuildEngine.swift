@@ -38,7 +38,7 @@ final class BuildEngine {
             let dst = Paths.imports.appendingPathComponent(name)
             try? FileManager.default.removeItem(at: dst)
             do {
-                try FileManager.default.copyItem(at: u, to: dst)
+                do { try FileManager.default.moveItem(at: u, to: dst) } catch { try FileManager.default.copyItem(at: u, to: dst) }   // the picker's own copy is moved, not copied twice
                 if keys { if !keyFiles.contains(dst) { keyFiles.append(dst) } } else if !gameFiles.contains(dst) { gameFiles.append(dst) }
             } catch { logTail.append("could not import \(u.lastPathComponent): \(error.localizedDescription)") }
         }
