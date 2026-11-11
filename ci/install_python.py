@@ -3,6 +3,7 @@
 Usage: install_python.py <app> <Python.xcframework> <app_packages dir> <app code dir>
 """
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,14 @@ from pathlib import Path
 
 app, xcfw, pkgs, code = (Path(a).resolve() for a in sys.argv[1:5])
 device = lambda p: 'simulator' not in str(p) and 'testbed' not in str(p)
+
+
+def bundle_id(name):
+    s = re.sub(r'[^A-Za-z0-9.]', '-', name)
+    parts = [('u' + c if c.startswith('-') else c) for c in s.split('.') if c]
+    return 'org.nxnativeios.py.' + '.'.join(parts)
+
+
 cands = [p.parent for p in xcfw.rglob('os.py') if p.parent.name.startswith('python3') and device(p)]
 if not cands:
     sys.exit(f'No device standard library in {xcfw}')
@@ -43,7 +52,7 @@ for so in sorted(list(dst_lib.rglob('*.so')) + list((app / 'app_packages').rglob
     subprocess.run(['install_name_tool', '-id', f'@rpath/{dotted}.framework/{dotted}', str(binpath)], check=True, capture_output=True)
     (fw / 'Info.plist').write_bytes(plistlib.dumps({
         'CFBundleExecutable': dotted,
-        'CFBundleIdentifier': 'org.nxnativeios.py.' + dotted.replace('_', '-'),
+        'CFBundleIdentifier': bundle_id(dotted),
         'CFBundlePackageType': 'FMWK', 'CFBundleName': dotted[:15],
         'CFBundleVersion': '1', 'CFBundleShortVersionString': '1.0',
         'CFBundleSupportedPlatforms': ['iPhoneOS'], 'MinimumOSVersion': '26.0',
@@ -54,8 +63,6 @@ for so in sorted(list(dst_lib.rglob('*.so')) + list((app / 'app_packages').rglob
     n += 1
 print(f'{ver}: stdlib + {n} binary modules as frameworks')
 
-# Artifact extraction and wheels can leave Mach-O libraries with mode 0644.
-# Normalize all framework executables, including frameworks embedded by Xcode.
 seen = set()
 for fw in sorted(fw_root.glob('*.framework')):
     plist = fw / 'Info.plist'
@@ -76,10 +83,9 @@ for fw in sorted(fw_root.glob('*.framework')):
     data.setdefault('MinimumOSVersion', '26.0')
     if plistlib.loads(plist.read_bytes()) != data:
         plist.write_bytes(plistlib.dumps(data))
-        # Metadata edits invalidate an existing ad-hoc resource seal.
         subprocess.run(['codesign', '--remove-signature', str(binary)], check=True, capture_output=True)
         shutil.rmtree(fw / '_CodeSignature', ignore_errors=True)
     if binary.stat().st_mode & 0o111 != 0o111:
         sys.exit(f'Framework executable is not executable: {binary}')
-    print(f'Framework OK: {fw.name} executable={executable} mode=0755 platform=iPhoneOS')
+    print(f'Framework OK: {fw.name} id={identifier}')
 print(f'Validated {len(seen)} framework bundles; final device signing remains the sideloader responsibility')

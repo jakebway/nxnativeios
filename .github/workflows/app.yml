@@ -4,7 +4,7 @@ name: Builder app IPA
 on:
   workflow_dispatch:
   push:
-    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', '.github/workflows/app.yml']
+    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', 'ci/audit_ipa.py', 'ci/make_icon.py', '.github/workflows/app.yml']
 
 permissions:
   contents: write
@@ -59,6 +59,11 @@ jobs:
           cp -R art/pydeps/site-packages/. pyapp/app_packages/
           cp -R phone/nxbuild pyapp/app/nxbuild && cp tools/mkgameframework.py pyapp/app/nxbuild/
           find pyapp -name '*.so' | head
+      - name: App icon
+        run: |
+          set -eu
+          python3 -m pip install --break-system-packages -q pillow || python3 -m pip install -q pillow
+          python3 ci/make_icon.py app/Assets.xcassets
       - name: Build
         run: |
           set -eu
@@ -75,6 +80,22 @@ jobs:
           ls "$appdir"; ls "$appdir/Frameworks" | head -50; du -sh "$appdir"
           mkdir -p out/Payload && cp -R "$appdir" out/Payload/
           (cd out && zip -qr -y NXBuilder.ipa Payload) && ls -la out/NXBuilder.ipa
+      - name: Audit IPA (blocks publishing on errors)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          python3 ci/audit_ipa.py out/NXBuilder.ipa out/ipa-audit-summary.txt
+          rc=$?
+          rm -rf auditpub && mkdir auditpub && cp out/ipa-audit-summary.txt auditpub/
+          cd auditpub
+          git init -q -b ipa-audit
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ipa-audit-summary.txt && git commit -q -m "IPA audit $GITHUB_SHA rc=$rc"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -q --force origin HEAD:refs/heads/ipa-audit
+          exit $rc
       - name: Publish to the "builder" release
         env:
           GH_TOKEN: ${{ github.token }}
