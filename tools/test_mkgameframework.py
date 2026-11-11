@@ -51,6 +51,8 @@ def main():
     except ImportError:
         print('lief not installed: header parse skipped')
     if '--dlopen' in sys.argv:   # macOS only: what loader.c actually does
+        subprocess.run(['codesign', '-s', '-', '-f', out], check=True)   # ad-hoc, as a sideloader signs it (arm64 loads no unsigned code)
+        subprocess.run(['codesign', '-v', '-v', out], check=True)
         h = ctypes.CDLL(out)   # dlopen
         dyld = ctypes.CDLL(None)
         dyld._dyld_image_count.restype = ctypes.c_uint32

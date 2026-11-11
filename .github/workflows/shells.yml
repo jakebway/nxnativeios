@@ -42,7 +42,7 @@ jobs:
         run: |
           git clone https://github.com/seedds/nxnative.git upstream
           git -C upstream checkout ${{ needs.list.outputs.commit }}
-          git -C upstream apply ../patches/*.patch
+          git -C upstream apply "$PWD"/patches/*.patch
       - run: command -v xcodegen || brew install xcodegen
       - name: Build the shell
         env:

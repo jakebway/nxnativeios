@@ -5,7 +5,7 @@ An iPhone app that turns your own Switch game (NSP + `prod.keys`) into a native 
 Built on [nxnative](https://github.com/seedds/nxnative) (MIT). No game files or keys are in this repository.
 
 ## App tabs
-- **Build**: pick `prod.keys` and the game folder from Files, tap Build, watch progress.
+- **Build**: import from Files — a `.zip` holding `prod.keys` and the game (NSP/XCI/NSZ, update, DLC), or the files one by one. No folder picker. Tap Build, watch progress.
 - **IPAs**: the downloaded and built IPAs: size, game, date; share to FlareStore, delete, rename.
 - **Settings**
 
