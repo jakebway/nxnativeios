@@ -29,6 +29,9 @@ targets:
       - framework: Frameworks/SpirvCross.framework
         embed: true
         link: false   # loaded by Python's ctypes at run time
+      - framework: Frameworks/Unrar.framework
+        embed: true
+        link: false   # loaded by Python's ctypes at run time (RAR archives)
       - framework: Frameworks/capstone.framework
         embed: true
         link: false   # loaded by Python's ctypes at run time

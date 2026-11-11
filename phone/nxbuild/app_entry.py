@@ -117,6 +117,17 @@ def gather(job, inputs):
         if dst is None: return
         with opener() as src, open(dst, 'wb') as out: shutil.copyfileobj(src, out, 8 << 20)
         job.log(f'input: {base} ({dst.stat().st_size / 1e6:.0f} MB)')
+    from . import rar
+    rars, inputs = rar.first_volumes(inputs)
+    for arc in rars:
+        job.log(f'rar: {arc.name}')
+        def want(name):
+            base = os.path.basename(name); low = base.lower()
+            if base.startswith('.'): return None
+            if low.endswith('.keys'): return str(keys_dir / base)
+            if low.endswith(GAME_EXT): return str(game_dir / base)
+            return None
+        for name, dst in rar.extract(arc, want): job.log(f'input: {os.path.basename(dst)} ({os.path.getsize(dst) / 1e6:.0f} MB)')
     groups, inputs = split_groups(inputs)
     for name, paths in groups:
         job.log(f'split zip: {name} ({len(paths)} parts)')

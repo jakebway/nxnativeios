@@ -31,6 +31,10 @@ def run(_arg=''):
         if r.returncode == 0: raise RuntimeError('a missing input did not fail')
         return 'loads, and a bad input returns an error'
     check('SpirvCross', spvc)
+    def unrar():
+        from . import rar
+        return f'UnRAR library API {rar.version()}'
+    check('RAR (unrar)', unrar)
     def fw():
         from . import mkgameframework as mk
         d = tempfile.mkdtemp(); data = os.urandom(0x14000)

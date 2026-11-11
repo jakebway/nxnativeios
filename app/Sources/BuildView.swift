@@ -18,7 +18,7 @@ struct BuildView: View {
                     Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
                     ForEach(engine.gameFiles, id: \.self) { row($0) }
                 } header: { Text("2. Game") } footer: {
-                    Text("Pick the .nsp, .xci or .nup, or a .zip of it. A zip split in parts (.zip.001, .zip.002 ... or .z01, .z02 ... .zip): pick all the parts at once. Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
+                    Text("Pick the .nsp, .xci or .nup, or a .zip of it. Split archives (.zip.001 / .z01 / .part1.rar / .r00 ...): pick all the parts at once. Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
                 }
                 Section {
                     Button { engine.start() } label: {
@@ -75,16 +75,17 @@ struct BuildView: View {
     }
 
     private func ext(_ u: URL) -> String { u.pathExtension.lowercased() }
-    private func isPart(_ u: URL) -> Bool { let e = ext(u); return (e.count == 3 && Int(e) != nil) || (e.count == 3 && e.hasPrefix("z") && Int(e.dropFirst()) != nil) }
-    private func icon(_ u: URL) -> String { ext(u) == "zip" || isPart(u) ? "doc.zipper" : ext(u) == "keys" ? "key.fill" : "gamecontroller.fill" }
+    private func isPart(_ u: URL) -> Bool { let e = ext(u); return (e.count == 3 && Int(e) != nil) || (e.count == 3 && (e.hasPrefix("z") || e.hasPrefix("r")) && Int(e.dropFirst()) != nil) }
+    private func icon(_ u: URL) -> String { ext(u) == "zip" || ext(u) == "rar" || isPart(u) ? "doc.zipper" : ext(u) == "keys" ? "key.fill" : "gamecontroller.fill" }
     private func kind(_ u: URL) -> String {
-        if isPart(u) { return "part of a split zip (pick all the parts)" }
+        if isPart(u) || u.lastPathComponent.lowercased().contains(".part") { return "part of a split archive (pick all the parts)" }
         switch ext(u) {
         case "zip": "zip (keys and game files inside are used)"
+        case "rar": "rar (keys and game files inside are used)"
         case "keys": u.lastPathComponent.lowercased().hasPrefix("title") ? "title keys" : "console keys"
         case "nsp", "xci", "nsz", "xcz": "game file"
         case "nup": "Switch 2 game (no keys needed)"
-        default: "not used: only .zip, .keys, .nsp, .xci, .nsz, .xcz, .nup"
+        default: "not used: only .zip, .rar, .keys, .nsp, .xci, .nsz, .xcz, .nup"
         }
     }
     private func size(_ u: URL) -> String {
