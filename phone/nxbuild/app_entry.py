@@ -8,10 +8,66 @@
 Inputs are .zip files and/or single files (no folder picker): keys are the file named prod.keys (else the one *.keys file), the game
 is every .nsp/.xci/.nsz/.xcz (base game, update, DLC), or one .nup file (needs no keys).
 """
-import json, os, re, shutil, subprocess, sys, time, traceback, zipfile
+import io, json, os, re, shutil, subprocess, sys, time, traceback, zipfile
 from pathlib import Path
 
 GAME_EXT = ('.nsp', '.xci', '.nsz', '.xcz', '.nup')   # .nup: a Switch 2 game in one NUP container (base, updates, DLC); it needs no keys
+
+
+class Joined(io.RawIOBase):
+    """Several files read as one: the parts of a split zip (game.zip.001, .002, ... or game.z01, game.z02, ..., game.zip)."""
+    def __init__(self, paths):
+        self.f = [open(p, 'rb') for p in paths]
+        self.sizes = [os.path.getsize(p) for p in paths]
+        self.starts = [sum(self.sizes[:i]) for i in range(len(paths))]
+        self.total = sum(self.sizes); self.pos = 0
+    def readable(self): return True
+    def seekable(self): return True
+    def tell(self): return self.pos
+    def seek(self, off, whence=0):
+        self.pos = off if whence == 0 else self.pos + off if whence == 1 else self.total + off
+        self.pos = max(0, self.pos); return self.pos
+    def readinto(self, b):
+        n = 0; mv = memoryview(b)
+        while n < len(b) and self.pos < self.total:
+            i = max(j for j in range(len(self.f)) if self.starts[j] <= self.pos)
+            self.f[i].seek(self.pos - self.starts[i])
+            got = self.f[i].readinto(mv[n:n + min(len(b) - n, self.starts[i] + self.sizes[i] - self.pos)])
+            if not got: break
+            n += got; self.pos += got
+        return n
+    def close(self):
+        for f in self.f: f.close()
+        super().close()
+
+
+def split_groups(inputs):
+    """([(group name, [part paths in order])], [other inputs]): game.zip.001/.002/..., or game.z01/game.z02/... with game.zip last."""
+    parts, rest = {}, []
+    for p in map(Path, inputs):
+        m = re.fullmatch(r'(.+)\.zip\.(\d{3})', p.name, re.I) or re.fullmatch(r'(.+)\.z(\d{2})', p.name, re.I)
+        if m: parts.setdefault((p.parent, m.group(1)), []).append((int(m.group(2)), p))
+        else: rest.append(p)
+    groups = []
+    for (d, name), lst in parts.items():
+        lst.sort(key=lambda t: t[0]); paths = [p for _, p in lst]
+        last = next((q for q in rest if q.parent == d and q.name.lower() == name.lower() + '.zip'), None)
+        if last is not None: rest.remove(last); paths.append(last)   # spanned zip: the .zip is the last part
+        nums = [n for n, _ in lst]
+        if nums != list(range(nums[0], nums[0] + len(nums))) or nums[0] not in (0, 1):
+            raise RuntimeError(f'{name}: some parts of the split zip are missing (have {", ".join(p.name for p in paths)})')
+        groups.append((name, paths))
+    return groups, rest
+
+
+def open_split_zip(paths):
+    """A ZipFile over the parts. A spanned zip (.z01, .z02, .zip) keeps each entry's offset relative to its own part: made absolute here."""
+    j = Joined([str(p) for p in paths]); z = zipfile.ZipFile(j)
+    if any(zi.volume for zi in z.infolist()):
+        last = j.starts[-1]
+        for zi in z.infolist():   # zipfile took the last part's start as the base of every offset
+            zi.header_offset += j.starts[min(zi.volume, len(paths) - 1)] - last
+    return z
 
 
 class Job:
@@ -61,6 +117,12 @@ def gather(job, inputs):
         if dst is None: return
         with opener() as src, open(dst, 'wb') as out: shutil.copyfileobj(src, out, 8 << 20)
         job.log(f'input: {base} ({dst.stat().st_size / 1e6:.0f} MB)')
+    groups, inputs = split_groups(inputs)
+    for name, paths in groups:
+        job.log(f'split zip: {name} ({len(paths)} parts)')
+        with open_split_zip(paths) as z:
+            for zi in z.infolist():
+                if not zi.is_dir(): take(zi.filename, lambda zi=zi: z.open(zi))
     for p in inputs:
         p = Path(p)
         if p.suffix.lower() == '.zip':
