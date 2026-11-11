@@ -1,16 +1,20 @@
-"""capstone's Python loader picks the library name from sys.platform, and on iOS that is 'ios', so it looks for libcapstone.so
-(the framework holds libcapstone.dylib). A symlink named libcapstone.so in a temporary folder, named by LIBCAPSTONE_PATH, gets it loaded."""
-import os, tempfile
+"""capstone's Python loader picks the library name from sys.platform; on iOS that is 'ios', so it looks for libcapstone.so
+(the framework holds libcapstone.dylib). Importing it while sys.platform says 'darwin' makes it load libcapstone.dylib from LIBCAPSTONE_PATH."""
+import sys, traceback
 
 
-def prepare():
-    fw = os.environ.get('LIBCAPSTONE_PATH', '')
-    dylib = os.path.join(fw, 'libcapstone.dylib')
-    if not os.path.isfile(dylib) or os.path.exists(os.path.join(fw, 'libcapstone.so')): return
-    d = os.path.join(tempfile.gettempdir(), 'nxb-capstone'); os.makedirs(d, exist_ok=True)
-    link = os.path.join(d, 'libcapstone.so')
+def prepare(log=None):
+    """Import capstone now (so the build script's later imports find it). Returns None, or the error text."""
+    if 'capstone' in sys.modules: return None
+    real = sys.platform
     try:
-        if os.path.islink(link) and os.readlink(link) != dylib: os.unlink(link)
-        if not os.path.lexists(link): os.symlink(dylib, link)
-        os.environ['LIBCAPSTONE_PATH'] = d
-    except OSError: pass
+        sys.platform = 'darwin'
+        import capstone   # noqa: F401
+        return None
+    except BaseException:
+        err = traceback.format_exc()
+        if log:
+            for l in err.splitlines(): log('capstone: ' + l)
+        return err
+    finally:
+        sys.platform = real

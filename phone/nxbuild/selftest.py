@@ -12,7 +12,9 @@ def run(_arg=''):
     check('zstd (built in)', lambda: __import__('compression.zstd').zstd.decompress(__import__('compression.zstd').zstd.compress(b'ok')).decode())
     check('lz4', lambda: __import__('lz4.block').block.decompress(__import__('lz4.block').block.compress(b'nxnative' * 4)).decode()[:8])
     def cs():
-        from . import capfix; capfix.prepare()
+        from . import capfix
+        e = capfix.prepare()
+        if e: raise RuntimeError(e.strip().splitlines()[-1] + ' | ' + ' | '.join(l.strip() for l in e.strip().splitlines()[-4:-1]))
         import capstone
         md = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
         i = next(md.disasm(bytes.fromhex('e00300aa'), 0)); return f'{capstone.__version__}, {i.mnemonic} {i.op_str}'
