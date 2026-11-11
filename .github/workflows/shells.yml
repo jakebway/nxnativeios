@@ -1,0 +1,62 @@
+name: Player shells
+
+# Builds one game-less player shell per game profile (no game data anywhere) and attaches them to the
+# "shells" release, where the phone app downloads the one for your game.
+on:
+  workflow_dispatch:
+    inputs:
+      games:
+        description: "Title IDs, space separated (empty = the default set)"
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      games: ${{ steps.g.outputs.games }}
+      commit: ${{ steps.g.outputs.commit }}
+    steps:
+      - id: g
+        run: |
+          list="${{ inputs.games }}"
+          # default: Super Mario Bros. Wonder (NVN), Hades (Vulkan), Digimon Story Cyber Sleuth (OpenGL), as nxnative's own CI
+          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000"
+          echo "games=$(printf '%s\n' $list | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git ls-remote https://github.com/seedds/nxnative.git HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+  shell:
+    needs: list
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        game: ${{ fromJson(needs.list.outputs.games) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: nxnative at a pinned commit, with our patches
+        run: |
+          git clone https://github.com/seedds/nxnative.git upstream
+          git -C upstream checkout ${{ needs.list.outputs.commit }}
+          git -C upstream apply ../patches/*.patch
+      - run: command -v xcodegen || brew install xcodegen
+      - name: Build the shell
+        env:
+          GAME: ${{ matrix.game }}
+          NXNATIVE: upstream
+        run: python3 tools/build_shell.py --output "$RUNNER_TEMP/shell" --zip "out/shell-${{ matrix.game }}.zip" 2>&1 | tee shell.log
+      - name: Publish to the shells release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view shells >/dev/null 2>&1 || gh release create shells --title "Player shells" --notes "Game-less nxnative player shells, one per game profile. nxnative commit: ${{ needs.list.outputs.commit }}"
+          gh release upload shells "out/shell-${{ matrix.game }}.zip" --clobber
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: log-${{ matrix.game }}
+          path: shell.log
