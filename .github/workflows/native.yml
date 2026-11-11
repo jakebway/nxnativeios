@@ -1,0 +1,41 @@
+name: Native tools (iOS frameworks)
+
+# nxnative's C# tools as iOS frameworks the builder app calls: NxExtract (NSP/XCI extraction with your prod.keys).
+on:
+  push:
+    paths: ['native/**', 'ci/**', 'tools/test_nx_extract_lib.py', '.github/workflows/native.yml', 'patches/**']
+  workflow_dispatch:
+
+jobs:
+  nx_extract:
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: ci/prepare_upstream.sh
+      - name: macOS build + call test
+        run: |
+          dotnet publish native/nx_extract/NxExtract.csproj -c Release -r osx-arm64 -nologo -o out/osx -p:UPSTREAM="$PWD/upstream"
+          python3 tools/test_nx_extract_lib.py out/osx/NxExtract.dylib upstream
+      - name: iOS framework
+        run: |
+          dotnet publish native/nx_extract/NxExtract.csproj -c Release -r ios-arm64 -nologo -o out/ios -p:UPSTREAM="$PWD/upstream"
+          ls -la out/ios
+          fw=out/NxExtract.framework; mkdir -p $fw
+          cp out/ios/NxExtract.dylib $fw/NxExtract
+          install_name_tool -id @rpath/NxExtract.framework/NxExtract $fw/NxExtract
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string org.nxnativeios.NxExtract' -c 'Add :CFBundleExecutable string NxExtract' \
+            -c 'Add :CFBundlePackageType string FMWK' -c 'Add :CFBundleVersion string 1' -c 'Add :CFBundleShortVersionString string 1.0' \
+            -c 'Add :MinimumOSVersion string 26.0' $fw/Info.plist
+          otool -l $fw/NxExtract | grep -A4 LC_BUILD_VERSION
+          nm -gU $fw/NxExtract | grep nx_extract_main
+          codesign -s - -f $fw && codesign -v $fw
+          du -sh $fw
+          (cd out && ditto -c -k --keepParent NxExtract.framework NxExtract.framework.zip)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NxExtract.framework
+          path: out/NxExtract.framework.zip
