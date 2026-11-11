@@ -16,7 +16,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(UPSTREAM)/dm/tools/nx_extract/Program.cs" Link="Program.cs" />
-    <!-- the same resources as upstream, so nx_extract_main("--source-sha") matches build_ipa_from_nsp.py's nx_extract_source_sha -->
+    <!-- the same resources as upstream, so nx_extract_main("source-sha" option) matches build_ipa_from_nsp.py's nx_extract_source_sha -->
     <EmbeddedResource Include="$(UPSTREAM)/dm/tools/nx_extract/Program.cs.orig" LogicalName="src0" />
     <EmbeddedResource Include="$(UPSTREAM)/dm/tools/nx_extract/nx_extract.csproj" LogicalName="src1" />
   </ItemGroup>
