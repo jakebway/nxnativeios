@@ -11,7 +11,9 @@ struct JobStatus: Decodable {
 
 @Observable @MainActor
 final class BuildEngine {
-    var picked: [URL] = []            // copies of the picked files, in Imports/
+    var keyFiles: [URL] = []          // copies of the picked key files (prod.keys, title.keys, or a .zip holding them), in Imports/
+    var gameFiles: [URL] = []         // copies of the picked games (.nsp / .xci / .zip, updates, DLC), in Imports/
+    var picked: [URL] { keyFiles + gameFiles }
     var running = false
     var status: JobStatus?
     var logTail: [String] = []
@@ -26,17 +28,33 @@ final class BuildEngine {
     init() { Paths.ensure() }
 
     /// Picked files are copied in right away: a security-scoped URL from Files does not outlive the picker for an hour-long build.
-    func add(_ urls: [URL]) {
+    /// Key files are named by what is inside them (prod.keys / title.keys), so "prod (1).keys" or "prod.keys.txt" still work.
+    func add(_ urls: [URL], keys: Bool) {
         for u in urls {
             let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }
-            let dst = Paths.imports.appendingPathComponent(u.lastPathComponent)
+            var name = u.lastPathComponent
+            let isZip = u.pathExtension.lowercased() == "zip"
+            if keys && !isZip, let kind = Self.keyKind(u) { name = kind }
+            let dst = Paths.imports.appendingPathComponent(name)
             try? FileManager.default.removeItem(at: dst)
-            do { try FileManager.default.copyItem(at: u, to: dst); if !picked.contains(dst) { picked.append(dst) } }
-            catch { logTail.append("could not import \(u.lastPathComponent): \(error.localizedDescription)") }
+            do {
+                try FileManager.default.copyItem(at: u, to: dst)
+                if keys { if !keyFiles.contains(dst) { keyFiles.append(dst) } } else if !gameFiles.contains(dst) { gameFiles.append(dst) }
+            } catch { logTail.append("could not import \(u.lastPathComponent): \(error.localizedDescription)") }
         }
     }
 
-    func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); picked.removeAll { $0 == u } }
+    /// "prod.keys" if the file has the console keys, "title.keys" if it is a list of 32-hex title keys, else nil (small text files only).
+    private static func keyKind(_ u: URL) -> String? {
+        guard let size = (try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize), size < 2_000_000,
+              let t = try? String(contentsOf: u, encoding: .utf8) else { return nil }
+        if t.contains("master_key_00") || t.contains("aes_kek_generation_source") { return "prod.keys" }
+        let lines = t.split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("#") && $0.contains("=") }
+        if !lines.isEmpty, lines.allSatisfy({ $0.split(separator: "=", maxSplits: 1).first.map { $0.trimmingCharacters(in: .whitespaces).count == 32 } ?? false }) { return "title.keys" }
+        return nil
+    }
+
+    func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); keyFiles.removeAll { $0 == u }; gameFiles.removeAll { $0 == u } }
 
     func start() {
         guard !running, !picked.isEmpty else { return }
@@ -87,7 +105,7 @@ final class BuildEngine {
         timer?.invalidate(); timer = nil; running = false
         UIApplication.shared.isIdleTimerDisabled = false
         if let error { status = JobStatus(state: "failed", stage: nil, progress: nil, ipa: nil, error: error) }
-        if status?.state == "done" { for u in picked { try? FileManager.default.removeItem(at: u) }; picked = [] }
+        if status?.state == "done" { for u in picked { try? FileManager.default.removeItem(at: u) }; keyFiles = []; gameFiles = [] }
     }
 
     var logURL: URL? { jobDir?.appendingPathComponent("log.txt") }

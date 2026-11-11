@@ -3,37 +3,37 @@ import UniformTypeIdentifiers
 
 struct BuildView: View {
     @Environment(BuildEngine.self) private var engine
-    @State private var importing = false
-    private static let types: [UTType] = [.zip, .data, .item]
+    private enum Slot { case keys, games }
+    @State private var slot: Slot?
+    private var importing: Binding<Bool> { Binding(get: { slot != nil }, set: { if !$0 { slot = nil } }) }
+    // .item matches any file, whatever its extension (.keys is not a type iOS knows); .zip is covered too
+    private static let types: [UTType] = [.item, .data]
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    Button { importing = true } label: { Label("Add files", systemImage: "plus.circle.fill") }
-                        .disabled(engine.running)
-                    ForEach(engine.picked, id: \.self) { u in
-                        HStack {
-                            Image(systemName: icon(u)).foregroundStyle(.secondary)
-                            VStack(alignment: .leading) {
-                                Text(u.lastPathComponent).lineLimit(1)
-                                Text(kind(u)).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(size(u)).font(.caption).foregroundStyle(.secondary)
-                        }
-                        .swipeActions { if !engine.running { Button("Remove", role: .destructive) { engine.remove(u) } } }
-                    }
-                } header: { Text("Your files") } footer: {
-                    Text("Pick a .zip holding prod.keys and the game, or the files one by one: prod.keys, the game (.nsp / .xci), its update and DLC. Nothing leaves this phone.")
+                    Button { slot = .keys } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
+                    ForEach(engine.keyFiles, id: \.self) { row($0) }
+                } header: { Text("1. Keys") } footer: {
+                    Text("Pick prod.keys. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both.")
+                }
+                Section {
+                    Button { slot = .games } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
+                    ForEach(engine.gameFiles, id: \.self) { row($0) }
+                } header: { Text("2. Game") } footer: {
+                    Text("Pick the .nsp or .xci (or a .zip of it). Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
                 }
                 Section {
                     Button { engine.start() } label: {
                         Label(engine.running ? "Building…" : "Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(engine.running || engine.picked.isEmpty)
+                    .disabled(engine.running || engine.keyFiles.isEmpty || engine.gameFiles.isEmpty)
                     .listRowBackground(Color.clear)
+                    if engine.keyFiles.isEmpty || engine.gameFiles.isEmpty {
+                        Text(engine.keyFiles.isEmpty ? "Add your keys first." : "Add a game.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 if let s = engine.status {
                     Section("Progress") {
@@ -58,10 +58,24 @@ struct BuildView: View {
                 }
             }
             .navigationTitle("NX Builder")
-            .fileImporter(isPresented: $importing, allowedContentTypes: Self.types, allowsMultipleSelection: true) { r in
-                if case .success(let urls) = r { engine.add(urls) }
+            .fileImporter(isPresented: importing, allowedContentTypes: Self.types, allowsMultipleSelection: true) { r in
+                let keys = slot == .keys
+                if case .success(let urls) = r { engine.add(urls, keys: keys) }
             }
         }
+    }
+
+    private func row(_ u: URL) -> some View {
+        HStack {
+            Image(systemName: icon(u)).foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+                Text(u.lastPathComponent).lineLimit(1)
+                Text(kind(u)).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(size(u)).font(.caption).foregroundStyle(.secondary)
+        }
+        .swipeActions { if !engine.running { Button("Remove", role: .destructive) { engine.remove(u) } } }
     }
 
     private func ext(_ u: URL) -> String { u.pathExtension.lowercased() }
@@ -69,7 +83,7 @@ struct BuildView: View {
     private func kind(_ u: URL) -> String {
         switch ext(u) {
         case "zip": "zip (keys and game files inside are used)"
-        case "keys": "keys"
+        case "keys": u.lastPathComponent.lowercased().hasPrefix("title") ? "title keys" : "console keys"
         case "nsp", "xci", "nsz", "xcz": "game file"
         default: "not used: only .zip, .keys, .nsp, .xci, .nsz, .xcz"
         }

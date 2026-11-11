@@ -71,6 +71,13 @@ def gather(job, inputs):
     keys = sorted(keys_dir.glob('*.keys'), key=lambda k: (k.name.lower() != 'prod.keys', k.name))
     if not keys: raise RuntimeError('no prod.keys among the files (a .keys file, alone or inside a .zip)')
     if not any(game_dir.iterdir()): raise RuntimeError('no game file among the files (.nsp, .xci, .nsz or .xcz, alone or inside a .zip)')
+    if len(keys) > 1:   # prod.keys + title.keys (same "name = hex" lines): one combined file, prod.keys first
+        merged = keys_dir / 'combined.keys'
+        with open(merged, 'wb') as out:
+            for k in keys:
+                out.write(k.read_bytes().rstrip() + b'\n')
+        job.log(f'keys: {" + ".join(k.name for k in keys)}')
+        return merged, game_dir
     return keys[0], game_dir
 
 
