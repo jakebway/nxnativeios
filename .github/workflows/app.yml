@@ -100,6 +100,10 @@ jobs:
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -q --force origin HEAD:refs/heads/ipa-audit
           exit $rc
+      - name: Remove the old "diag" test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete diag --cleanup-tag -y || true
       - name: Publish to the "builder" release
         env:
           GH_TOKEN: ${{ github.token }}
