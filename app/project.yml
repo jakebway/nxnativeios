@@ -24,10 +24,13 @@ targets:
         embed: true
       - framework: Frameworks/NxTools.framework
         embed: true
+        link: false   # loaded by Python's ctypes at run time
       - framework: Frameworks/SpirvCross.framework
         embed: true
+        link: false   # loaded by Python's ctypes at run time
       - framework: Frameworks/capstone.framework
         embed: true
+        link: false   # loaded by Python's ctypes at run time
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.nxnativeios.builder
