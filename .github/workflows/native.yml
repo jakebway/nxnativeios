@@ -3,7 +3,7 @@ name: Native tools (iOS frameworks)
 # nxnative's C# tools as one iOS framework the builder app calls: NxTools (nx_extract: NSP/XCI extraction with your prod.keys; dmsh_xlate: shader translation).
 on:
   push:
-    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', '.github/workflows/native.yml', 'patches/**']
+    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
   workflow_dispatch:
 
 jobs:
@@ -39,3 +39,33 @@ jobs:
         with:
           name: NxTools.framework
           path: out/NxTools.framework.zip
+
+  spirvcross:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/prepare_upstream.sh
+      - run: command -v glslangValidator || brew install glslang
+      - name: macOS build, compared with nxnative's pinned spirv-cross
+        run: |
+          native/SpirvCross/build.sh macos out
+          for s in tools/testdata/*.frag tools/testdata/*.comp; do glslangValidator -V "$s" -o "out/$(basename $s).spv"; done
+          python3 tools/test_spirvcross_lib.py out/libSpirvCross-macos.dylib upstream/dm/gfx/tools/spirv_cross_bin/spirv-cross out/*.spv
+      - name: iOS framework
+        run: |
+          native/SpirvCross/build.sh ios out
+          fw=out/SpirvCross.framework; mkdir -p $fw
+          cp out/libSpirvCross-ios.dylib $fw/SpirvCross
+          install_name_tool -id @rpath/SpirvCross.framework/SpirvCross $fw/SpirvCross
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string org.nxnativeios.SpirvCross' -c 'Add :CFBundleExecutable string SpirvCross' \
+            -c 'Add :CFBundlePackageType string FMWK' -c 'Add :CFBundleVersion string 1' -c 'Add :CFBundleShortVersionString string 1.0' \
+            -c 'Add :MinimumOSVersion string 26.0' $fw/Info.plist
+          otool -l $fw/SpirvCross | grep -A4 LC_BUILD_VERSION
+          nm -gU $fw/SpirvCross | grep spirv_cross_main
+          codesign -s - -f $fw && codesign -v $fw && du -sh $fw
+          (cd out && ditto -c -k --keepParent SpirvCross.framework SpirvCross.framework.zip)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpirvCross.framework
+          path: out/SpirvCross.framework.zip

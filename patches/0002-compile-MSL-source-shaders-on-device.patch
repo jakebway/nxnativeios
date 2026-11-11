@@ -1,8 +1,8 @@
 diff --git a/dm/gfx/nvn/nvn_mtl.m b/dm/gfx/nvn/nvn_mtl.m
-index 21cff4c..2a924c3 100644
+index 21cff4c..fd93151 100644
 --- a/dm/gfx/nvn/nvn_mtl.m
 +++ b/dm/gfx/nvn/nvn_mtl.m
-@@ -6012,6 +6012,23 @@ static NSString *lib_name(NSString *path) {
+@@ -6012,6 +6012,21 @@ static NSString *lib_name(NSString *path) {
      NSString *dir = g_msl_dir ? [g_msl_dir stringByAppendingString:@"/"] : nil;
      return dir && [path hasPrefix:dir] ? [path substringFromIndex:dir.length] : path.lastPathComponent;
  }
@@ -10,12 +10,10 @@ index 21cff4c..2a924c3 100644
 +// A file that does not start with the metallib magic is compiled here, with the offline flags that have a runtime equivalent: -fpreserve-invariance (preserveInvariance)
 +// and fast math (the offline default, also the runtime default). -O1, -fwrapv and -fbracket-depth have none: see the nxnativeios README. Metal keeps compiled source in its own cache.
 +static id<MTLLibrary> lib_from_data(dispatch_data_t d, NSError **err) {
-+    __block char magic[4] = {0}; __block size_t got = 0;
-+    dispatch_data_apply(d, ^bool(dispatch_data_t r, size_t off, const void *buf, size_t len) { size_t n = len < 4 - got ? len : 4 - got; memcpy(magic + got, buf, n); got += n; return got < 4; });
-+    if (got == 4 && !memcmp(magic, "MTLB", 4)) return [g_dev newLibraryWithData:d error:err];
++    // The data is one mapping (lib_from_file_), so the map is the same bytes, not a copy
 +    const void *buf = NULL; size_t len = 0; dispatch_data_t flat = dispatch_data_create_map(d, &buf, &len);
++    if (len >= 4 && !memcmp(buf, "MTLB", 4)) return [g_dev newLibraryWithData:flat error:err];
 +    NSString *src = [[NSString alloc] initWithBytes:buf length:len encoding:NSUTF8StringEncoding];
-+    (void)flat;
 +    if (!src) { if (err) *err = [NSError errorWithDomain:@"nxnativeios" code:1 userInfo:@{NSLocalizedDescriptionKey: @"shader file is neither a metallib nor UTF-8 MSL"}]; return nil; }
 +    static MTLCompileOptions *opt; static dispatch_once_t once;
 +    dispatch_once(&once, ^{ opt = [MTLCompileOptions new]; opt.preserveInvariance = YES; });
@@ -26,7 +24,7 @@ index 21cff4c..2a924c3 100644
  static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err);
  static id<MTLLibrary> lib_from_file(NSString *path, NSError **err) { return lib_tag(lib_from_file_(path, err), lib_name(path)); }
  static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
-@@ -6021,7 +6038,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
+@@ -6021,7 +6036,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
          if (x && msl_image_map(img, x, &f)) {
              void *base = f.base; size_t base_len = f.base_len;
              dispatch_data_t d = dispatch_data_create(f.data, f.size, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ munmap(base, base_len); });
@@ -35,7 +33,7 @@ index 21cff4c..2a924c3 100644
          }
          if (!x) errno = open_errno;
      }
-@@ -6029,7 +6046,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
+@@ -6029,7 +6044,7 @@ static id<MTLLibrary> lib_from_file_(NSString *path, NSError **err) {
      size_t len = (size_t)st.st_size; void *m = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0); close(fd);
      if (m == MAP_FAILED) { if (err) *err = [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"mmap failed %@", path]}]; return nil; }
      dispatch_data_t d = dispatch_data_create(m, len, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ munmap(m, len); });
