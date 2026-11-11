@@ -91,4 +91,19 @@ final class BuildEngine {
     }
 
     var logURL: URL? { jobDir?.appendingPathComponent("log.txt") }
+
+    var selfTest: String?
+    func runSelfTest() {
+        selfTest = "Running…"
+        let bundle = Paths.bundle.path, upstream = Paths.upstream.path
+        Task.detached(priority: .userInitiated) {
+            var err = [CChar](repeating: 0, count: 512)
+            var report: String
+            if nxb_python_start(bundle, upstream, &err, Int32(err.count)) != 0 { report = "❌ Python did not start: \(String(cString: err))" }
+            else if let r = nxb_python_selftest() { report = String(cString: r); free(r) }
+            else { report = "❌ the self-test did not run" }
+            let final = report
+            await MainActor.run { self.selfTest = final }
+        }
+    }
 }

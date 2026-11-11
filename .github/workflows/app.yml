@@ -7,7 +7,7 @@ on:
     paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', '.github/workflows/app.yml']
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   native:
@@ -75,6 +75,13 @@ jobs:
           ls "$appdir"; ls "$appdir/Frameworks" | head -50; du -sh "$appdir"
           mkdir -p out/Payload && cp -R "$appdir" out/Payload/
           (cd out && zip -qr -y NXBuilder.ipa Payload) && ls -la out/NXBuilder.ipa
+      - name: Publish to the "builder" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view builder >/dev/null 2>&1 || gh release create builder --title "NX Builder (latest)" --notes "The builder app. Install with FlareStore (keep Increased Memory Limit on)."
+          gh release upload builder out/NXBuilder.ipa --clobber
+          gh release edit builder --notes "The builder app, built from $(git rev-parse --short HEAD) with nxnative $(git -C upstream rev-parse --short HEAD). Install with FlareStore."
       - uses: actions/upload-artifact@v4
         with:
           name: NXBuilder-ipa

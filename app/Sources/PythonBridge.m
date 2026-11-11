@@ -53,3 +53,22 @@ int nxb_python_build(const char *job_dir) {
     PyGILState_Release(g);
     return rc;
 }
+
+char *nxb_python_selftest(void) {
+    PyGILState_STATE g = PyGILState_Ensure();
+    char *out = NULL;
+    PyObject *m = PyImport_ImportModule("nxbuild.selftest");
+    if (m) {
+        PyObject *r = PyObject_CallMethod(m, "run", "s", "");
+        if (r) { const char *s = PyUnicode_AsUTF8(r); if (s) out = strdup(s); Py_DECREF(r); }
+        Py_DECREF(m);
+    }
+    if (!out && PyErr_Occurred()) {
+        PyObject *t, *v, *tb; PyErr_Fetch(&t, &v, &tb);
+        PyObject *sv = v ? PyObject_Str(v) : NULL; const char *msg = sv ? PyUnicode_AsUTF8(sv) : "unknown error";
+        size_t n = strlen(msg) + 40; out = malloc(n); snprintf(out, n, "Python error: %s", msg ? msg : "?");
+        Py_XDECREF(sv); Py_XDECREF(t); Py_XDECREF(v); Py_XDECREF(tb);
+    }
+    PyGILState_Release(g);
+    return out;
+}

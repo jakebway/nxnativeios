@@ -4,3 +4,5 @@
 int nxb_python_start(const char *bundle, const char *upstream, char *err, int errlen);
 // nxbuild.app_entry.run(job_json): the build of one job folder. Blocks; returns its exit code. Progress goes to the job's log file.
 int nxb_python_build(const char *job_dir);
+// nxbuild.selftest.run(): the report (malloc'd UTF-8, the caller frees it), or NULL with the Python error printed
+char *nxb_python_selftest(void);

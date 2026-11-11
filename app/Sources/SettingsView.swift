@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(BuildEngine.self) private var engine
     @AppStorage("showFPS") private var showFPS = true
     @AppStorage("language") private var language = ""
     @AppStorage("keepBuild") private var keepBuild = true
@@ -26,6 +27,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("Kept build files make the next build of the same game much faster (finished steps are reused). Your keys are never kept.")
                 }
+                Section {
+                    Button("Run self-test") { engine.runSelfTest() }.disabled(engine.running)
+                    if let r = engine.selfTest {
+                        Text(r).font(.caption.monospaced()).textSelection(.enabled)
+                        ShareLink(item: r) { Label("Share report", systemImage: "square.and.arrow.up") }
+                    }
+                } header: { Text("Check") } footer: { Text("Checks Python and every tool a build needs, without a game. Takes a few seconds.") }
                 Section("About") {
                     LabeledContent("Supported games", value: "\(supported) bundled player shells")
                     Text("Built on nxnative (MIT). Your games and keys stay on this phone. Not affiliated with Nintendo.").font(.caption).foregroundStyle(.secondary)
