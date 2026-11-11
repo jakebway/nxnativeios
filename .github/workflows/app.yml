@@ -118,6 +118,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view builder >/dev/null 2>&1 || gh release create builder --title "NX Builder (latest)" --notes "The builder app. Install with FlareStore (keep Increased Memory Limit on)."
+          gh release delete-asset builder NXBuilder.ipa -y || true   # the old name
           gh release upload builder out/NXnativeiOS.ipa --clobber
           gh release edit builder --notes "The builder app, built from $(git rev-parse --short HEAD) with nxnative $(git -C upstream rev-parse --short HEAD). Install with FlareStore."
       - uses: actions/upload-artifact@v4
