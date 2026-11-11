@@ -10,11 +10,14 @@ f = lib.nx_extract_main; f.restype = ctypes.c_int
 f.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p), LOG, ctypes.c_void_p]
 def run(*a):
     lines.clear(); argv = (ctypes.c_char_p * max(1, len(a)))(*[x.encode() for x in a]); return f(len(a), argv, cb, None), list(lines)
-rc, out = run('--source-sha')
-want = hashlib.sha256((up / 'dm/tools/nx_extract/Program.cs.orig').read_bytes() + (up / 'dm/tools/nx_extract/nx_extract.csproj').read_bytes()).hexdigest()[:16]
-print('source-sha', rc, out, 'want', want)
-assert rc == 0 and out == [want]
+r = lib.nx_extract_resources; r.restype = None; r.argtypes = [LOG, ctypes.c_void_p]
+lines.clear(); r(cb, None); print('resources:', lines)
 rc, out = run()
 print('no args ->', rc, out[:1])
 assert rc == 2 and out and out[0].startswith('usage: nx_extract')
+rc, out = run('--source-sha')
+want = hashlib.sha256((up / 'dm/tools/nx_extract/Program.cs.orig').read_bytes() + (up / 'dm/tools/nx_extract/nx_extract.csproj').read_bytes()).hexdigest()[:16]
+print('source-sha', rc, out, 'want', want)
+for l in out: print('  ', l)
+assert rc == 0 and out == [want]
 print('OK')

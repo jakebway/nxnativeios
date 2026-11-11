@@ -19,6 +19,14 @@ static unsafe class NxExports {
         }
     }
 
+    // The embedded resource names, one per line through log (a diagnostic for the --source-sha check)
+    [UnmanagedCallersOnly(EntryPoint = "nx_extract_resources")]
+    static void Resources(delegate* unmanaged<byte*, void*, void> log, void* ctx) {
+        var w = new LineWriter(log, ctx);
+        foreach (var n in typeof(P).Assembly.GetManifestResourceNames()) w.WriteLine(n);
+        w.WriteLine($"assembly {typeof(P).Assembly.FullName}"); w.Flush();
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "nx_extract_main")]
     static int Main(int argc, byte** argv, delegate* unmanaged<byte*, void*, void> log, void* ctx) {
         var w = new LineWriter(log, ctx);
@@ -27,7 +35,7 @@ static unsafe class NxExports {
             var a = new string[argc];
             for (int i = 0; i < argc; i++) a[i] = Marshal.PtrToStringUTF8((IntPtr)argv[i]);
             return P.Main(a);
-        } catch (Exception e) { Console.WriteLine($"[RED] nx_extract: {e.GetType().Name}: {e.Message}"); return 99; }
+        } catch (Exception e) { Console.WriteLine($"[RED] nx_extract: {e}"); return 99; }
         finally { w.Flush(); }
     }
 }
