@@ -79,7 +79,7 @@ struct BuildView: View {
     private func icon(_ u: URL) -> String { ext(u) == "zip" || ext(u) == "rar" || isPart(u) ? "doc.zipper" : ext(u) == "keys" ? "key.fill" : "gamecontroller.fill" }
     private func kind(_ u: URL) -> String {
         if isPart(u) || u.lastPathComponent.lowercased().contains(".part") { return "part of a split archive (pick all the parts)" }
-        switch ext(u) {
+        return switch ext(u) {
         case "zip": "zip (keys and game files inside are used)"
         case "rar": "rar (keys and game files inside are used)"
         case "keys": u.lastPathComponent.lowercased().hasPrefix("title") ? "title keys" : "console keys"
