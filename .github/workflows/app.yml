@@ -43,7 +43,16 @@ jobs:
         run: |
           set -eu
           R=app/NXData; mkdir -p $R/shells
-          gh release download shells -R "$GITHUB_REPOSITORY" -p 'shell-*.zip' -D $R/shells
+          git clone -q --depth 1 -b shells-data "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-src 2>/dev/null || {
+            # one-time move of the shells from the old "shells" release to the shells-data branch
+            gh release download shells -R "$GITHUB_REPOSITORY" -p 'shell-*.zip' -D shells-mig
+            ( cd shells-mig && git init -q && git config user.name 'github-actions[bot]' && git config user.email '41898282+github-actions[bot]@users.noreply.github.com' \
+              && git checkout -q --orphan shells-data && git add -A && git commit -q -m "shells (moved from the shells release)" \
+              && git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-data )
+            git clone -q --depth 1 -b shells-data "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-src
+          }
+          cp shells-src/shell-*.zip $R/shells/
+          gh release delete shells --cleanup-tag -y || true
           ls $R/shells
           # nxnative as the phone runs it: pristine C# sources (nx_extract / dmsh_xlate --source-sha compare against them), no .git, no Mac executables
           rm -rf phone-up && cp -R upstream phone-up && rm -rf phone-up/.git
@@ -73,7 +82,7 @@ jobs:
           set -eu
           command -v xcodegen || brew install xcodegen
           cd app && xcodegen generate
-          xcodebuild -project NXBuilder.xcodeproj -scheme NXBuilder -configuration Release -destination 'generic/platform=iOS' \
+          xcodebuild -project NXnativeiOS.xcodeproj -scheme NXnativeiOS -configuration Release -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee ../build.log | grep -E 'error:|warning: .*Swift|BUILD' || true
           grep -q 'BUILD SUCCEEDED' ../build.log || { grep -B2 -A20 -E 'Undefined symbols|ld: |error:' ../build.log | head -80; exit 1; }
       - name: Python into the app, IPA
@@ -83,13 +92,13 @@ jobs:
           python3 ci/install_python.py "$appdir" app/Frameworks/Python.xcframework pyapp/app_packages pyapp/app
           ls "$appdir"; ls "$appdir/Frameworks" | head -50; du -sh "$appdir"
           mkdir -p out/Payload && cp -R "$appdir" out/Payload/
-          (cd out && zip -qr -y NXBuilder.ipa Payload) && ls -la out/NXBuilder.ipa
+          (cd out && zip -qr -y NXnativeiOS.ipa Payload) && ls -la out/NXnativeiOS.ipa
       - name: Audit IPA (blocks publishing on errors)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          python3 ci/audit_ipa.py out/NXBuilder.ipa out/ipa-audit-summary.txt
+          python3 ci/audit_ipa.py out/NXnativeiOS.ipa out/ipa-audit-summary.txt
           rc=$?
           rm -rf auditpub && mkdir auditpub && cp out/ipa-audit-summary.txt auditpub/
           cd auditpub
@@ -109,13 +118,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view builder >/dev/null 2>&1 || gh release create builder --title "NX Builder (latest)" --notes "The builder app. Install with FlareStore (keep Increased Memory Limit on)."
-          gh release upload builder out/NXBuilder.ipa --clobber
+          gh release upload builder out/NXnativeiOS.ipa --clobber
           gh release edit builder --notes "The builder app, built from $(git rev-parse --short HEAD) with nxnative $(git -C upstream rev-parse --short HEAD). Install with FlareStore."
       - uses: actions/upload-artifact@v4
         continue-on-error: true   # the release is the delivery; the artifact quota can run out
         with:
-          name: NXBuilder-ipa
-          path: out/NXBuilder.ipa
+          name: NXnativeiOS-ipa
+          path: out/NXnativeiOS.ipa
           compression-level: 0
       - uses: actions/upload-artifact@v4
         if: failure()

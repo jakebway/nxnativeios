@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct NXBuilderApp: App {
+struct NXnativeiOSApp: App {
     @State private var engine = BuildEngine()
     var body: some Scene {
         WindowGroup {

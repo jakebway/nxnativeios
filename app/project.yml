@@ -1,4 +1,4 @@
-name: NXBuilder
+name: NXnativeiOS
 options:
   bundleIdPrefix: org.nxnativeios
   deploymentTarget:
@@ -11,7 +11,7 @@ settings:
     CODE_SIGN_IDENTITY: ""
     TARGETED_DEVICE_FAMILY: "1,2"
 targets:
-  NXBuilder:
+  NXnativeiOS:
     type: application
     platform: iOS
     sources:

@@ -14,13 +14,13 @@ jobs:
       - name: Download existing IPA
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download builder --pattern NXBuilder.ipa --dir audit-input
+        run: gh release download builder --pattern NXnativeiOS.ipa --dir audit-input
       - name: Inspect archive without changing it
         run: |
           mkdir -p report
           python3 - <<'PY' > report/ipa-audit.txt 2>&1
           import collections, hashlib, os, pathlib, plistlib, stat, subprocess, zipfile
-          ipa = pathlib.Path('audit-input/NXBuilder.ipa')
+          ipa = pathlib.Path('audit-input/NXnativeiOS.ipa')
           print('IPA SHA256:', hashlib.sha256(ipa.read_bytes()).hexdigest())
           print('SOURCE COMMIT:', os.environ.get('GITHUB_SHA'))
           print('RUN:', os.environ.get('GITHUB_RUN_ID'))

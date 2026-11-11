@@ -49,12 +49,21 @@ jobs:
           GAME: ${{ matrix.game }}
           NXNATIVE: upstream
         run: python3 tools/build_shell.py --output "$RUNNER_TEMP/shell" --zip "out/shell-${{ matrix.game }}.zip" 2>&1 | tee shell.log
-      - name: Publish to the shells release
+      - name: Publish to the shells-data branch (not a release: keeps the Releases page to the app)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view shells >/dev/null 2>&1 || gh release create shells --title "Player shells" --notes "Game-less nxnative player shells, one per game profile. nxnative commit: ${{ needs.list.outputs.commit }}"
-          gh release upload shells "out/shell-${{ matrix.game }}.zip" --clobber
+          set -eu
+          z="$PWD/out/shell-${{ matrix.game }}.zip"; d=$(mktemp -d); cd $d
+          git init -q; git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          for i in 1 2 3 4 5 6; do
+            if git fetch -q --depth 1 origin shells-data; then git checkout -q -B shells-data FETCH_HEAD; else git checkout -q --orphan shells-data; fi
+            cp "$z" .
+            git add -A; git commit -q -m "shell ${{ matrix.game }} (nxnative ${{ needs.list.outputs.commit }})" || true
+            git push -q origin shells-data && exit 0 || sleep $((RANDOM % 10 + 3))
+          done
+          exit 1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
