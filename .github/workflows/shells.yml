@@ -49,7 +49,7 @@ jobs:
           GAME: ${{ matrix.game }}
           NXNATIVE: upstream
         run: python3 tools/build_shell.py --output "$RUNNER_TEMP/shell" --zip "out/shell-${{ matrix.game }}.zip" 2>&1 | tee shell.log
-      - name: Publish to the shells-data branch (not a release: keeps the Releases page to the app)
+      - name: "Publish to the shells-data branch (not a release, so the Releases page stays clean)"
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
