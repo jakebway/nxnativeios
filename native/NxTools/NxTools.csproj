@@ -1,0 +1,31 @@
+<!-- nxnativeios: nxnative's dm/tools/nx_extract and dm/gfx/tools/dmsh_xlate built as one a NativeAOT shared library (ios-arm64 for the app, osx-arm64 for the CI test).
+     UPSTREAM = an nxnative checkout; ci/prepare_upstream.sh makes both Mains internal and gives each tool's embedded sources its own resource names. -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <PublishAotUsingRuntimePack>true</PublishAotUsingRuntimePack>
+    <AssemblyName>NxTools</AssemblyName>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <UPSTREAM Condition="'$(UPSTREAM)' == ''">$(MSBuildThisFileDirectory)../../upstream</UPSTREAM>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(UPSTREAM)/dm/tools/nx_extract/Program.cs" Link="Program.cs" />
+    <!-- the same resources as upstream, so nx_extract_main("source-sha" option) matches build_ipa_from_nsp.py's nx_extract_source_sha -->
+    <EmbeddedResource Include="$(UPSTREAM)/dm/tools/nx_extract/Program_cs.orig" LogicalName="nx_src0" />
+    <EmbeddedResource Include="$(UPSTREAM)/dm/tools/nx_extract/nx_extract.csproj" LogicalName="nx_src1" />
+    <Compile Include="$(UPSTREAM)/dm/gfx/tools/dmsh_xlate/Program.cs" Link="dmsh_xlate.cs" />
+    <EmbeddedResource Include="$(UPSTREAM)/dm/gfx/tools/dmsh_xlate/Program_cs.orig" LogicalName="xl_src0" />
+    <EmbeddedResource Include="$(UPSTREAM)/dm/gfx/tools/dmsh_xlate/dmsh_xlate.csproj" LogicalName="xl_src1" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="LibHac" Version="0.19.0" />
+    <ProjectReference Include="$(UPSTREAM)/dm/third_party/ryujinx/src/Ryujinx.Graphics.Shader/Ryujinx.Graphics.Shader.csproj" />
+    <ProjectReference Include="$(UPSTREAM)/dm/third_party/ryujinx/src/Ryujinx.Common/Ryujinx.Common.csproj" />
+  </ItemGroup>
+</Project>

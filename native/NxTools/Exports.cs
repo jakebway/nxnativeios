@@ -1,6 +1,8 @@
-// nxnativeios: nxnative's nx_extract (LibHac) as a C function inside an iOS framework, for the builder app.
-//   int nx_extract_main(int argc, const char **argv, void (*log)(const char *line, void *ctx), void *ctx)
-// argv has no program name: argv[0] is nx_extract's first argument. Every line it prints (stdout and stderr) goes to log; returns its exit code.
+// nxnativeios: nxnative's two C# tools as C functions inside one iOS framework (one .NET runtime), for the builder app:
+//   int nx_extract_main(int argc, const char **argv, void (*log)(const char *line, void *ctx), void *ctx)   NSP / XCI extraction (LibHac)
+//   int dmsh_xlate_main(int argc, const char **argv, void (*log)(const char *line, void *ctx), void *ctx)   Switch shaders -> SPIR-V (Ryujinx's translator)
+// argv has no program name: argv[0] is the tool's first argument. Every line it prints (stdout and stderr) goes to log; returns its exit code.
+// The tools share Console: the app runs one at a time.
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -27,15 +29,20 @@ static unsafe class NxExports {
         w.WriteLine($"assembly {typeof(P).Assembly.FullName}"); w.Flush();
     }
 
-    [UnmanagedCallersOnly(EntryPoint = "nx_extract_main")]
-    static int Main(int argc, byte** argv, delegate* unmanaged<byte*, void*, void> log, void* ctx) {
+    static int Run(string tool, Func<string[], int> main, int argc, byte** argv, delegate* unmanaged<byte*, void*, void> log, void* ctx) {
         var w = new LineWriter(log, ctx);
         Console.SetOut(w); Console.SetError(w);
         try {
             var a = new string[argc];
             for (int i = 0; i < argc; i++) a[i] = Marshal.PtrToStringUTF8((IntPtr)argv[i]);
-            return P.Main(a);
-        } catch (Exception e) { Console.WriteLine($"[RED] nx_extract: {e}"); return 99; }
+            return main(a);
+        } catch (Exception e) { Console.WriteLine($"[RED] {tool}: {e}"); return 99; }
         finally { w.Flush(); }
     }
+
+    [UnmanagedCallersOnly(EntryPoint = "nx_extract_main")]
+    static int NxExtract(int argc, byte** argv, delegate* unmanaged<byte*, void*, void> log, void* ctx) => Run("nx_extract", P.Main, argc, argv, log, ctx);
+
+    [UnmanagedCallersOnly(EntryPoint = "dmsh_xlate_main")]
+    static int DmshXlate(int argc, byte** argv, delegate* unmanaged<byte*, void*, void> log, void* ctx) => Run("dmsh_xlate", SwshXlate.Main, argc, argv, log, ctx);
 }
