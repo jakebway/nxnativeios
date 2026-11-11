@@ -32,6 +32,10 @@ dst_lib = app / 'python/lib' / ver
 shutil.rmtree(app / 'python', ignore_errors=True)
 shutil.copytree(stdlib, dst_lib, symlinks=False, ignore=shutil.ignore_patterns('__pycache__', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo', 'ensurepip', '*.a', 'lib-dynload'))
 shutil.copytree(dyn[0], dst_lib / 'lib-dynload', symlinks=False)
+# sysconfig (used by capstone's loader, ctypes.util, ...) imports _sysconfigdata__ios_arm64-iphoneos; it ships outside the stdlib folder
+sc = [p for p in xcfw.rglob('_sysconfigdata*.py') if device(p)]
+print('sysconfigdata:', [str(p.relative_to(xcfw)) for p in sc])
+for p in sc: shutil.copy2(p, dst_lib / p.name)
 for name, src in (('app_packages', pkgs), ('app', code)):
     shutil.rmtree(app / name, ignore_errors=True)
     shutil.copytree(src, app / name, ignore=shutil.ignore_patterns('__pycache__'))
