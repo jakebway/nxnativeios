@@ -111,7 +111,7 @@ final class BuildEngine {
         timer?.invalidate(); timer = nil; running = false
         UIApplication.shared.isIdleTimerDisabled = false
         if let error { status = JobStatus(state: "failed", stage: nil, progress: nil, ipa: nil, error: error) }
-        if status?.state == "done" { for u in gameFiles { try? FileManager.default.removeItem(at: u) }; gameFiles = []   // the saved keys stay }
+        if status?.state == "done" { for u in gameFiles { try? FileManager.default.removeItem(at: u) }; gameFiles = [] }   // the saved keys stay
     }
 
     var logURL: URL? { jobDir?.appendingPathComponent("log.txt") }
