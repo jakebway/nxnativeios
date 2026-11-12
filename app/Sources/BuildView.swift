@@ -56,12 +56,28 @@ struct BuildView: View {
     }
 
     @ViewBuilder private func result(_ s: JobStatus) -> some View {
-        Section {
-            if s.state == "done" {
-                Label("Built \(URL(fileURLWithPath: s.ipa ?? "").lastPathComponent)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                Button("Open the IPAs tab") { engine.tab = 1 }
-            } else {
-                Label(s.error ?? "The build stopped", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+        if s.state == "done" {
+            let url = URL(fileURLWithPath: s.ipa ?? "")
+            let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 }.map(Int64.init)
+            Section {
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 52)).foregroundStyle(.green)
+                    Text("Your IPA is ready").font(.title3.weight(.semibold))
+                    Text([url.deletingPathExtension().lastPathComponent, bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }].compactMap { $0 }.joined(separator: " · "))
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        ShareLink(item: url) { Label("Share to FlareStore", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
+                            .buttonStyle(.borderedProminent).controlSize(.large)
+                    }
+                    Button("See it in IPAs") { engine.tab = 1 }.font(.subheadline)
+                }.frame(maxWidth: .infinity).padding(.vertical, 8)
+            }
+        } else {
+            Section {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 40)).foregroundStyle(.red)
+                    Text(s.error ?? "The build stopped").font(.subheadline).multilineTextAlignment(.center)
+                }.frame(maxWidth: .infinity).padding(.vertical, 8)
             }
         }
         if !engine.logTail.isEmpty { Section { DisclosureGroup("Log") { logBox } } }

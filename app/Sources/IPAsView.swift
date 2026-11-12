@@ -10,25 +10,27 @@ struct IPAsView: View {
     @State private var files: [IPAFile] = []
     @State private var renaming: IPAFile?
     @State private var newName = ""
-    @State private var importing = false
 
     var body: some View {
         NavigationStack {
             List {
                 if files.isEmpty {
-                    ContentUnavailableView("No IPAs yet", systemImage: "shippingbox", description: Text("Built games appear here. You can also add IPAs you downloaded."))
+                    ContentUnavailableView("No IPAs yet", systemImage: "shippingbox", description: Text("Games you build appear here, ready to sign."))
                 }
                 ForEach(files) { f in
-                    HStack {
-                        Image(systemName: "app.badge").font(.title2).foregroundStyle(.tint)
-                        VStack(alignment: .leading) {
-                            Text(f.url.deletingPathExtension().lastPathComponent).lineLimit(2)
+                    HStack(spacing: 14) {
+                        Image(systemName: "gamecontroller.fill").font(.title3).foregroundStyle(.white)
+                            .frame(width: 48, height: 48)
+                            .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(f.url.deletingPathExtension().lastPathComponent).font(.headline).lineLimit(2)
                             Text("\(ByteCountFormatter.string(fromByteCount: f.size, countStyle: .file)) · \(f.date.formatted(date: .abbreviated, time: .shortened))")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up") }.buttonStyle(.borderless)
+                        Spacer(minLength: 4)
+                        ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up").font(.body.weight(.semibold)).frame(width: 40, height: 40).background(.tint.opacity(0.15), in: Circle()) }.buttonStyle(.borderless)
                     }
+                    .padding(.vertical, 4)
                     .contextMenu {
                         ShareLink(item: f.url) { Label("Share (open in FlareStore)", systemImage: "square.and.arrow.up") }
                         Button { renaming = f; newName = f.url.deletingPathExtension().lastPathComponent } label: { Label("Rename", systemImage: "pencil") }
@@ -46,17 +48,8 @@ struct IPAsView: View {
                 }
             }
             .navigationTitle("IPAs")
-            .toolbar { Button { importing = true } label: { Image(systemName: "plus") } }
             .refreshable { load() }
             .onAppear(perform: load)
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { r in
-                guard case .success(let urls) = r else { return }
-                for u in urls where u.pathExtension.lowercased() == "ipa" {
-                    let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }
-                    try? FileManager.default.copyItem(at: u, to: Paths.ipas.appendingPathComponent(u.lastPathComponent))
-                }
-                load()
-            }
             .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
                 TextField("Name", text: $newName)
                 Button("Rename") { rename() }
