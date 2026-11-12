@@ -274,6 +274,12 @@ def base_title(keys, game_dir, log):
 def run(job_dir):
     job = Job(job_dir)
     watch_memory(job)
+    try:   # a crash in native code leaves no Python error: its message and the Python stacks go to the log instead
+        import faulthandler
+        faulthandler.enable(file=job.logf, all_threads=True)
+        os.dup2(job.logf.fileno(), 2); os.dup2(job.logf.fileno(), 1)
+        job.log('[crash log on]')
+    except Exception as e: job.log(f'[crash log off: {e}]')
     so, se = sys.stdout, sys.stderr
     class W:   # the script's prints and progress events go to the log
         def write(self, s):
