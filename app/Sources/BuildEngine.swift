@@ -76,7 +76,7 @@ final class BuildEngine {
         }
         status = st
         if let t = try? String(contentsOf: last.appendingPathComponent("log.txt"), encoding: .utf8) {
-            logTail = t.split(separator: "\n").suffix(400).compactMap { Self.readable(String($0)) }
+            logTail = Array(t.split(separator: "\n").compactMap { Self.readable(String($0)) }.suffix(250))
         }
         if let n = try? String(contentsOf: last.appendingPathComponent("bg.txt"), encoding: .utf8) { logTail += n.split(separator: "\n").map(String.init) }
     }
@@ -119,16 +119,19 @@ final class BuildEngine {
         if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("log.txt")) {
             defer { try? h.close() }
             let size = (try? h.seekToEnd()) ?? 0
-            try? h.seek(toOffset: size > 16000 ? size - 16000 : 0)
+            let cut = size > 120_000
+            try? h.seek(toOffset: cut ? size - 120_000 : 0)
             if let d = try? h.readToEnd(), let s = String(data: d, encoding: .utf8) {
-                logTail = s.split(separator: "\n").suffix(400).compactMap { Self.readable(String($0)) }
+                var lines = s.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+                if cut { lines.removeFirst() }   // it starts mid-line
+                logTail = lines.compactMap { Self.readable($0) }.suffix(250).map { $0 }
             }
         }
     }
 
     /// A log line as a person reads it: progress events are for the bar, so they are left out here.
     nonisolated static func readable(_ line: String) -> String? {
-        if line.hasPrefix("progress: ") { return nil }
+        if line.hasPrefix("progress: ") || line.contains("\"ev\": \"progress\"") { return nil }
         guard line.hasPrefix("{\"ev\""), let j = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return line.isEmpty ? nil : line }
         let name = j["name"] as? String ?? ""
         switch j["ev"] as? String {

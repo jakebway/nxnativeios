@@ -125,7 +125,7 @@ class Job:
     def _event2(self, ev):
         kind = ev.get('ev'); k, n = ev.get('k'), ev.get('n') or self.status.get('n')
         if kind == 'stage':
-            key = stage_key(ev.get('name')); self.frac = 0.0; self.stage_t0 = time.time()
+            key = stage_key(ev.get('name')); self.frac = 0.0; self.stage_t0 = time.time(); self.stage_total = None
             self.status.update(stage=ev.get('name') or self.status['stage'], key=key, k=k, n=n, step='', detail='', eta=None)
             self.set(progress=self._overall())
         elif kind == 'step':
@@ -136,6 +136,9 @@ class Job:
             self.set(progress=self._overall())
         elif kind == 'progress':
             done, total = ev.get('done'), ev.get('total')
+            if total: self.stage_total = (total, ev.get('unit') or '')   # an estimate from the stage's first event, kept for the ones that omit it
+            elif done is not None and getattr(self, 'stage_total', None) and done <= self.stage_total[0] * 1.5:
+                total = self.stage_total[0]; ev = dict(ev, unit=self.stage_total[1])
             frac = ev.get('frac')
             if frac is None and total and done is not None: frac = min(done / total, 0.99)
             if frac is not None: self.frac = frac
@@ -143,6 +146,7 @@ class Job:
             detail = (f'{done:,} / {total:,} {unit}' if total and done is not None else f'{done:,} {unit}' if done is not None else '').strip()
             if unit == 'B' and done is not None: detail = f'{done / 1e9:.1f} / {total / 1e9:.1f} GB' if total else f'{done / 1e9:.1f} GB'
             eta = ev.get('eta')
+            if eta is None and frac and frac > 0.02 and self.stage_t0: eta = (time.time() - self.stage_t0) * (1 - frac) / frac
             if time.time() - self._last_set >= 1.0:   # the app polls once a second
                 self._last_set = time.time()
                 self.set(progress=self._overall(), detail=detail, eta=eta, step=ev.get('step') or self.status.get('step', ''))
