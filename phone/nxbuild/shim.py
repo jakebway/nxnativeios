@@ -156,13 +156,16 @@ def _python(args, out, env, cwd):
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
                 target()
+            out.write('[py] script returned\n')
         except SystemExit as e:
             code = e.code if isinstance(e.code, int) else (0 if e.code is None else (out.write(f'{e.code}\n') and 1))
         except BaseException as e:
             import traceback; out.write(traceback.format_exc()); code = 1
         finally:
+            out.write(f'[py] leaving with code {code}\n')
             sys.argv, sys.path[:] = saved[0], saved[1]
             _set_environ(saved[2]); os.chdir(saved[3])
+            out.write('[py] restored\n')
         return code
 
 
@@ -220,6 +223,7 @@ class InProcess:
         out, bin_ = _Sink(), io.BytesIO()
         try: self.returncode = _dispatch(self.args, out, bin_, data, self._env, self._cwd)
         except Exception as e: out.write(f'[RED] nxnativeios: {self.args[0]}: {e!r}\n'); self.returncode = 1
+        out.write(f'[py] dispatch done {self.returncode}\n')
         payload = bin_.getvalue() + out.value().encode('utf-8', 'replace')
         self._deliver(payload, stdout, 'stdout')
         if stderr not in (None, STDOUT, DEVNULL, PIPE): pass   # everything went to stdout's payload; a separate stderr file gets nothing
