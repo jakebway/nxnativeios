@@ -40,10 +40,13 @@ final class BackgroundKeeper {
 
     func begin(notes: URL) {
         Self.notesPath = notes.path; active = true; shown = 0
-        let r = BGContinuedProcessingTaskRequest(identifier: Self.taskID, title: lastTitle, subtitle: "Starting")
-        r.strategy = .queue
-        do { try BGTaskScheduler.shared.submit(r); Self.note("background task requested") }
-        catch { Self.note("background task refused: \(error.localizedDescription)") }
+        // The system's progress card is off unless asked for: a build that ended every time right after the shader split, with the card showing "Task failed", while the app was in the foreground.
+        if UserDefaults.standard.bool(forKey: "systemCard") {
+            let r = BGContinuedProcessingTaskRequest(identifier: Self.taskID, title: lastTitle, subtitle: "Starting")
+            r.strategy = .queue
+            do { try BGTaskScheduler.shared.submit(r); Self.note("background task requested") }
+            catch { Self.note("background task refused: \(error.localizedDescription)") }
+        } else { Self.note("no iOS progress card (off in Settings)") }
         if UserDefaults.standard.object(forKey: "keepAlive") as? Bool ?? true { startAudio() }
         // A few extra seconds of grace if the app is sent to the background while nothing else is keeping it alive.
         grace = UIApplication.shared.beginBackgroundTask(withName: "build") { [weak self] in
