@@ -24,8 +24,10 @@ final class BackgroundKeeper {
     nonisolated static func note(_ text: String) {
         guard let p = notesPath else { return }
         let line = "[bg \(Date().formatted(date: .omitted, time: .standard))] \(text)\n"
-        if let h = FileHandle(forWritingAtPath: p) { defer { try? h.close() }; _ = try? h.seekToEnd(); try? h.write(contentsOf: Data(line.utf8)) }
-        else { try? Data(line.utf8).write(to: URL(fileURLWithPath: p)) }
+        let fd = open(p, O_WRONLY | O_APPEND | O_CREAT, 0o644)   // appended whole, beside the build's own lines
+        guard fd >= 0 else { return }
+        defer { close(fd) }
+        _ = line.utf8CString.withUnsafeBufferPointer { write(fd, $0.baseAddress, $0.count - 1) }
     }
 
     /// Before the app finishes launching (App.init).
@@ -37,7 +39,7 @@ final class BackgroundKeeper {
     }
 
     func begin(notes: URL) {
-        Self.notesPath = notes.path; active = true
+        Self.notesPath = notes.path; active = true; shown = 0
         let r = BGContinuedProcessingTaskRequest(identifier: Self.taskID, title: lastTitle, subtitle: "Starting")
         r.strategy = .queue
         do { try BGTaskScheduler.shared.submit(r); Self.note("background task requested") }
@@ -65,19 +67,32 @@ final class BackgroundKeeper {
     private func attach(_ t: BGContinuedProcessingTask) {
         guard active else { t.setTaskCompleted(success: true); return }
         task = t
-        t.progress.totalUnitCount = 1000
-        t.expirationHandler = Self.expiry()
+        t.progress.totalUnitCount = Self.units
+        t.expirationHandler = Self.expiry(t)
         Self.note("background task granted")
     }
 
+    /// iOS kills the whole app when an expired task is not marked complete: the handler completes it at once (the build goes on, kept alive by the silent audio).
     /// Built outside the main actor: iOS calls the handler on its own queue.
-    nonisolated private static func expiry() -> @Sendable () -> Void {
-        { BackgroundKeeper.note("the system ended the background task (the build goes on while audio runs)") }
+    nonisolated private static func expiry(_ t: BGContinuedProcessingTask) -> @Sendable () -> Void {
+        nonisolated(unsafe) let t = t
+        return {
+            t.setTaskCompleted(success: true)
+            BackgroundKeeper.note("the system ended the background task; the build goes on")
+            Task { @MainActor in BackgroundKeeper.shared.task = nil }
+        }
     }
 
+    nonisolated static let units: Int64 = 1_000_000
+    private var shown: Int64 = 0
+
+    /// iOS expires a continued processing task whose progress stops moving, and long steps (a module rewrite, the end of the shader split) report nothing for minutes:
+    /// the card's count creeps up by a little every update, never past the real progress by more than the step to the end.
     func update(progress: Double, stage: String) {
         guard let t = task else { return }
-        t.progress.completedUnitCount = Int64(max(0, min(1, progress)) * 1000)
+        let real = Int64(max(0, min(1, progress)) * Double(Self.units))
+        shown = min(Self.units - 1, max(real, shown + max(1, (Self.units - shown) / 2000)))
+        t.progress.completedUnitCount = shown
         t.updateTitle(lastTitle, subtitle: stage)
     }
 

@@ -102,7 +102,7 @@ final class BuildEngine {
         ]
         try? JSONSerialization.data(withJSONObject: cfg, options: .prettyPrinted).write(to: job.appendingPathComponent("job.json"))
         jobDir = job; running = true; startedAt = .now; status = JobStatus(state: "running", stage: "starting", progress: 0); logTail = []
-        BackgroundKeeper.shared.begin(notes: job.appendingPathComponent("bg.txt"))
+        BackgroundKeeper.shared.begin(notes: job.appendingPathComponent("log.txt"))   // in the log itself, so a shared log shows them
         UIApplication.shared.isIdleTimerDisabled = true   // iOS suspends a background app: keep the screen on while building
         let bundle = Paths.bundle.path, upstream = Paths.upstream.path, jobPath = job.path
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } }
@@ -120,7 +120,6 @@ final class BuildEngine {
     private func poll() {
         guard let job = jobDir else { return }
         if let d = try? Data(contentsOf: job.appendingPathComponent("status.json")), let s = try? JSONDecoder().decode(JobStatus.self, from: d) { status = s; BackgroundKeeper.shared.update(progress: s.progress ?? 0, stage: s.stage ?? "working") }
-        defer { if let n = try? String(contentsOf: job.appendingPathComponent("bg.txt"), encoding: .utf8) { logTail += n.split(separator: "\n").map(String.init) } }
         if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("log.txt")) {
             defer { try? h.close() }
             let size = (try? h.seekToEnd()) ?? 0
@@ -128,7 +127,7 @@ final class BuildEngine {
             try? h.seek(toOffset: cut ? size - 120_000 : 0)
             if let d = try? h.readToEnd(), let s = String(data: d, encoding: .utf8) {
                 var lines = s.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
-                if cut { lines.removeFirst() }   // it starts mid-line
+                if cut, !lines.isEmpty { lines.removeFirst() }   // it starts mid-line
                 logTail = lines.compactMap { Self.readable($0) }.suffix(250).map { $0 }
             }
         }
