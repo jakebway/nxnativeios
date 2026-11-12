@@ -4,7 +4,6 @@ struct SettingsView: View {
     @Environment(BuildEngine.self) private var engine
     @AppStorage("showFPS") private var showFPS = true
     @AppStorage("language") private var language = ""
-    @AppStorage("keepBuild") private var keepBuild = true
     @AppStorage("keepAlive") private var keepAlive = true
     @State private var cacheSize = ""
     private let languages = ["": "English (default)", "ja": "Japanese", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "nl": "Dutch",
@@ -30,14 +29,13 @@ struct SettingsView: View {
                     }
                 }
                 Section {
-                    Toggle("Keep build files", isOn: $keepBuild)
                     Toggle("Keep building in the background", isOn: $keepAlive)
-                    Button("Clear build files (\(cacheSize))", role: .destructive) {
+                    Button("Delete leftover files (\(cacheSize))", role: .destructive) {
                         try? FileManager.default.removeItem(at: Paths.jobs); try? FileManager.default.removeItem(at: Paths.imports)
                         Paths.ensure(); measure()
                     }
                 } footer: {
-                    Text("Kept build files make the next build of the same game much faster (finished steps are reused). Your keys are never kept.")
+                    Text("Work files are deleted as soon as a build ends: only the finished IPA stays (in the IPAs tab). Your keys stay saved until you forget them.")
                 }
                 Section {
                     Button("Run self-test") { engine.runSelfTest() }.disabled(engine.running)

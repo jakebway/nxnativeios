@@ -27,10 +27,11 @@ final class BuildEngine {
 
     private var showFPS: Bool { UserDefaults.standard.object(forKey: "showFPS") as? Bool ?? true }
     private var language: String { UserDefaults.standard.string(forKey: "language") ?? "" }
-    private var keepBuild: Bool { UserDefaults.standard.object(forKey: "keepBuild") as? Bool ?? true }
+    private var keepBuild: Bool { false }   // the work files (extracted game, rewritten code, shaders) are deleted as soon as the build ends: only the IPA stays
 
     init() {
         Paths.ensure()
+        Self.purgeOldJobs()
         restoreLastJob()
         keyFiles = ((try? FileManager.default.contentsOfDirectory(at: Paths.keys, includingPropertiesForKeys: nil)) ?? [])
             .filter { !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -154,7 +155,20 @@ final class BuildEngine {
         UIApplication.shared.isIdleTimerDisabled = false
         BackgroundKeeper.shared.end(success: error == nil && status?.state == "done")
         if let error { status = JobStatus(state: "failed", stage: nil, progress: nil, ipa: nil, error: error) }
+        if let j = jobDir { Self.cleanWork(j) }
         if status?.state == "done" { for u in gameFiles { try? FileManager.default.removeItem(at: u) }; gameFiles = [] }   // the saved keys stay
+    }
+
+    /// Work files are huge (the extracted game alone is as big as the game): only the log and status of a job stay.
+    nonisolated static func cleanWork(_ job: URL) {
+        for n in ["build", "input", "extract"] { try? FileManager.default.removeItem(at: job.appendingPathComponent(n)) }
+    }
+
+    /// At launch: older jobs go entirely, the last one keeps its log.
+    nonisolated static func purgeOldJobs() {
+        guard let dirs = try? FileManager.default.contentsOfDirectory(at: Paths.jobs, includingPropertiesForKeys: nil).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) else { return }
+        for d in dirs.dropLast() { try? FileManager.default.removeItem(at: d) }
+        if let last = dirs.last { cleanWork(last) }
     }
 
     var logURL: URL? { jobDir?.appendingPathComponent("log.txt") }
