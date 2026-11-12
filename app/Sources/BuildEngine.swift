@@ -86,6 +86,8 @@ final class BuildEngine {
     func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); keyFiles.removeAll { $0 == u }; gameFiles.removeAll { $0 == u } }
 
     var startedAt: Date?
+    var tab = 0                        // the selected tab: 0 Build, 1 IPAs, 2 Settings
+    var gameName: String? { gameFiles.first.map { $0.deletingPathExtension().lastPathComponent } }
 
     func start() {
         guard !running, !picked.isEmpty else { return }

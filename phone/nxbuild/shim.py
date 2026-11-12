@@ -193,7 +193,7 @@ def _build_ipa(args, out, env):
         assemble.assemble(__import__('pathlib').Path(args[0]), log=lambda l: out.write(l + '\n'))
         return 0
     except assemble.AssembleError as e: out.write(f'[RED] {e}\n'); return 1
-    finally: os.environ.clear(); os.environ.update(saved)
+    finally: _set_environ(saved)
 
 
 class InProcess:

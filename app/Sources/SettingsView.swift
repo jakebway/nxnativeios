@@ -13,6 +13,16 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    if engine.keyFiles.isEmpty {
+                        Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
+                    } else {
+                        Label("Keys saved on this phone", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                        Button("Forget keys", role: .destructive) { engine.forgetKeys() }.disabled(engine.running)
+                    }
+                } header: { Text("Keys") } footer: {
+                    Text("Pick prod.keys once; it is saved on this phone and never leaves it. title.keys is optional (most .nsp files carry their own), and one .zip holding both works too. Switch 2 games (.nup) need no keys.")
+                }
                 Section("Games you build") {
                     Toggle("Show frame rate", isOn: $showFPS)
                     Picker("Game language", selection: $language) {
@@ -36,6 +46,11 @@ struct SettingsView: View {
                         ShareLink(item: r) { Label("Share report", systemImage: "square.and.arrow.up") }
                     }
                 } header: { Text("Check") } footer: { Text("Checks Python and every tool a build needs, without a game. Takes a few seconds.") }
+                if FileManager.default.fileExists(atPath: CrashReports.file.path) {
+                    Section {
+                        ShareLink(item: CrashReports.file) { Label("Share what iOS reported", systemImage: "square.and.arrow.up") }
+                    } header: { Text("Crash reports") } footer: { Text("How iOS says the app ended (a crash, or closed for memory or time). It can arrive a day late.") }
+                }
                 Section("About") {
                     LabeledContent("Supported games", value: "\(supported) bundled player shells")
                     Text("Built on nxnative (MIT). Your games and keys stay on this phone. Not affiliated with Nintendo.").font(.caption).foregroundStyle(.secondary)

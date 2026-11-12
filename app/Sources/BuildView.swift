@@ -8,72 +8,81 @@ struct BuildView: View {
     var body: some View {
         NavigationStack {
             List {
-                if engine.keyFiles.isEmpty {
-                    Section {
-                        Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
-                    } header: { Text("1. Keys (once)") } footer: {
-                        Text("Pick prod.keys. They are saved on this phone, so you do this only once. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both. Switch 2 games (.nup) need no keys.")
-                    }
-                } else {
-                    Section {
-                        Label("Keys saved on this phone", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                            .swipeActions { if !engine.running { Button("Forget keys", role: .destructive) { engine.forgetKeys() } } }
-                    } footer: { Text("Swipe left to forget them.") }
-                }
-                Section {
-                    Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
-                    ForEach(engine.gameFiles, id: \.self) { row($0) }
-                } header: { Text(engine.keyFiles.isEmpty ? "2. Game" : "Game") } footer: {
-                    Text("Pick the .nsp, .xci or .nup, or a .zip of it. Split archives (.zip.001 / .z01 / .part1.rar / .r00 ...): pick all the parts at once. Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
-                }
-                Section {
-                    Button { engine.start() } label: {
-                        Label(engine.running ? "Building…" : "Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(engine.running || !ready)
-                } footer: {
-                    if !ready { Text(engine.gameFiles.isEmpty ? "Add a game." : "Add your keys first.") }
-                }
-                if let s = engine.status {
-                    Section("Progress") {
-                        if s.state == "running" {
-                            ProgressView(value: s.progress ?? 0) {
-                                HStack { Text(s.stage ?? "working").lineLimit(1); Spacer(); Text("\(Int((s.progress ?? 0) * 100))%").monospacedDigit() }
-                            }
-                            if let d = s.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                            HStack {
-                                TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s.elapsed))") }
-                                Spacer()
-                                if let e = s.eta, e > 1 { Text("About \(clock(e)) left") }
-                            }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                            Text("It keeps building if you leave the app. If iOS closes it anyway, reopen it and share the log.").font(.caption2).foregroundStyle(.secondary)
-                        } else if s.state == "done" {
-                            Label("Done: \(URL(fileURLWithPath: s.ipa ?? "").lastPathComponent)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                            Text("Find it in the IPAs tab and share it to FlareStore.").font(.caption)
-                        } else {
-                            Label(s.error ?? "The build stopped", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                        }
-                        if !engine.logTail.isEmpty {
-                            ScrollViewReader { proxy in
-                                ScrollView {
-                                    LazyVStack(alignment: .leading, spacing: 1) {
-                                        ForEach(Array(engine.logTail.enumerated()), id: \.offset) { i, line in
-                                            Text(line).font(.system(size: 11, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading).id(i)
-                                        }
-                                    }.textSelection(.enabled)
-                                }
-                                .frame(height: 260)
-                                .onChange(of: engine.logTail.count) { _, n in if n > 0 { proxy.scrollTo(n - 1, anchor: .bottom) } }
-                                .onAppear { if !engine.logTail.isEmpty { proxy.scrollTo(engine.logTail.count - 1, anchor: .bottom) } }
-                            }
-                            if let l = engine.logURL { ShareLink(item: l) { Label("Share full log", systemImage: "square.and.arrow.up") } }
-                        }
-                    }
-                }
+                if engine.running { running } else { idle }
             }
             .navigationTitle("NXnativeiOS")
+        }
+    }
+
+    /// Nothing building: the game to pick, the Build button, and how the last build ended.
+    @ViewBuilder private var idle: some View {
+        if let s = engine.status, s.state != "running" { result(s) }
+        Section {
+            Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }
+            ForEach(engine.gameFiles, id: \.self) { row($0) }
+        } header: { Text("Game") } footer: {
+            Text("Pick the .nsp, .xci or .nup, or a .zip / .rar of it. Split archives (.zip.001, .z01, .part1.rar, .r00 ...): pick all the parts at once. Add the update and DLC here too. Nothing leaves this phone.")
+        }
+        Section {
+            Button { engine.start() } label: { Label("Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity) }
+                .buttonStyle(.borderedProminent).controlSize(.large).disabled(!ready)
+        } footer: {
+            if engine.gameFiles.isEmpty { Text("Add a game to start.") }
+            else if !ready { Button("Add your keys in Settings first") { engine.tab = 2 }.font(.footnote) }
+        }
+    }
+
+    /// Building: only the progress, with the log beside it.
+    @ViewBuilder private var running: some View {
+        let s = engine.status
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(engine.gameName ?? "Your game").font(.headline).lineLimit(2)
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(Int((s?.progress ?? 0) * 100))%").font(.system(size: 44, weight: .semibold, design: .rounded)).monospacedDigit()
+                    Spacer()
+                    Text(s?.stage ?? "Starting").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.trailing).lineLimit(2)
+                }
+                ProgressView(value: s?.progress ?? 0)
+                HStack {
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s?.elapsed))") }
+                    Spacer()
+                    if let e = s?.eta, e > 1 { Text("About \(clock(e)) left") }
+                }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                if let d = s?.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }.padding(.vertical, 4)
+        } footer: { Text("You can leave the app: it keeps building. Big games take a while.") }
+        logSection
+    }
+
+    @ViewBuilder private func result(_ s: JobStatus) -> some View {
+        Section {
+            if s.state == "done" {
+                Label("Built \(URL(fileURLWithPath: s.ipa ?? "").lastPathComponent)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Button("Open the IPAs tab") { engine.tab = 1 }
+            } else {
+                Label(s.error ?? "The build stopped", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+            }
+        }
+        if !engine.logTail.isEmpty { Section { DisclosureGroup("Log") { logBox }; if let l = engine.logURL { ShareLink(item: l) { Label("Share full log", systemImage: "square.and.arrow.up") } } } }
+    }
+
+    @ViewBuilder private var logSection: some View {
+        if !engine.logTail.isEmpty { Section("Log") { logBox } }
+    }
+
+    private var logBox: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(engine.logTail.enumerated()), id: \.offset) { i, line in
+                        Text(line).font(.system(size: 11, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading).id(i)
+                    }
+                }.textSelection(.enabled)
+            }
+            .frame(height: 260)
+            .onChange(of: engine.logTail.count) { _, n in if n > 0 { proxy.scrollTo(n - 1, anchor: .bottom) } }
+            .onAppear { if !engine.logTail.isEmpty { proxy.scrollTo(engine.logTail.count - 1, anchor: .bottom) } }
         }
     }
 

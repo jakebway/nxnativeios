@@ -3,13 +3,13 @@ import SwiftUI
 @main
 struct NXnativeiOSApp: App {
     @State private var engine = BuildEngine()
-    init() { BackgroundKeeper.register() }
+    init() { BackgroundKeeper.register(); CrashReports.shared.start() }
     var body: some Scene {
         WindowGroup {
-            TabView {
-                Tab("Build", systemImage: "hammer") { BuildView() }
-                Tab("IPAs", systemImage: "shippingbox") { IPAsView() }
-                Tab("Settings", systemImage: "gearshape") { SettingsView() }
+            TabView(selection: Bindable(engine).tab) {
+                Tab("Build", systemImage: "hammer", value: 0) { BuildView() }
+                Tab("IPAs", systemImage: "shippingbox", value: 1) { IPAsView() }
+                Tab("Settings", systemImage: "gearshape", value: 2) { SettingsView() }
             }
             .environment(engine)
         }
