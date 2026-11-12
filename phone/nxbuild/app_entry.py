@@ -83,9 +83,12 @@ class Job:
     def _event(self, line):   # the NSP script's --progress json events
         try: ev = json.loads(line)
         except ValueError: return
+        try: self._event2(ev)
+        except Exception: pass   # a progress event must never stop a build
+    def _event2(self, ev):
         k, n = ev.get('k'), ev.get('n') or self.status.get('n')
         if ev.get('ev') == 'stage': self.set(stage=ev.get('name') or self.status['stage'], k=k, n=n, progress=((k or 1) - 1) / n if n else 0.0)
-        elif ev.get('ev') == 'progress' and ev.get('total') and self.status.get('n'):
+        elif ev.get('ev') == 'progress' and ev.get('total') and ev.get('done') is not None and self.status.get('n'):
             self.set(progress=min(1.0, ((self.status.get('k') or 1) - 1 + ev['done'] / ev['total']) / self.status['n']))
 
     def set(self, **kw):
