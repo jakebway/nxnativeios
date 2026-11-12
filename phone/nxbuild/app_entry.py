@@ -95,6 +95,13 @@ class Job:
     def log(self, line):
         self.logf.write(line.rstrip('\n') + '\n')
         if line.startswith('{"ev"'): self._event(line)
+        elif line.startswith('progress: '):
+            m = re.match(r'progress: (\d+)/(\d+)\s*$', line)
+            if m and int(m.group(2)):
+                a, b = int(m.group(1)), int(m.group(2)); self.frac = min(1.0, a / b)
+                el = time.time() - (self.stage_t0 or time.time())
+                self.status.update(detail=f'{a:,} of {b:,}', eta=(el * (1 - self.frac) / self.frac) if self.frac > 0.02 else None)
+                self.set(progress=self._overall())
 
     def _event(self, line):   # the NSP script's --progress json events
         try: ev = json.loads(line)
@@ -165,7 +172,7 @@ def watch_memory(job):
         while True:
             try:
                 free = f() / 1e6; peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
-                if last is None or abs(free - last) > 250 or time.time() - t > 120:
+                if last is None or abs(free - last) > 250 or time.time() - t > (10 if free < 1500 else 120):
                     job.log(f'[memory] {free:,.0f} MB free for this app, peak {peak:,.0f} MB'); last = free; t = time.time()
             except Exception: pass
             time.sleep(5)
