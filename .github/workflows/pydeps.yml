@@ -2,7 +2,7 @@ name: Python for the phone
 
 # CPython for iOS (python.org's XCframework) and the native pieces nxnative's build scripts import:
 #   capstone 5 (pure-Python bindings + libcapstone as capstone.framework, found through LIBCAPSTONE_PATH)
-#   lz4 (C extension, cibuildwheel for iOS)
+#   lz4, zbic (C extensions, cibuildwheel for iOS), fonttools (pure Python)
 on:
   push:
     paths: ['.github/workflows/pydeps.yml', 'ci/pydeps/**']
@@ -34,7 +34,7 @@ jobs:
       - name: Sources
         run: |
           python3 -m pip install --break-system-packages -q cibuildwheel 2>/dev/null || python3 -m pip install -q cibuildwheel
-          python3 -m pip download --no-deps --no-binary :all: "$CAPSTONE" lz4 -d src
+          python3 -m pip download --no-deps --no-binary :all: "$CAPSTONE" lz4 zbic -d src
           cd src && for f in *.tar.gz; do tar xzf "$f"; done && ls
       - name: libcapstone (iOS framework + macOS dylib for the test)
         run: |
@@ -62,16 +62,21 @@ jobs:
           md = capstone.Cs(capstone.CS_ARCH_ARM64, capstone.CS_MODE_ARM)
           i = next(md.disasm(bytes.fromhex('e00300aa'), 0x1000)); print('capstone', capstone.__version__, i.mnemonic, i.op_str)
           assert (i.mnemonic, i.op_str) == ('mov', 'x0, x0')"
-      - name: lz4 for iOS (cibuildwheel)
+      - name: lz4 and zbic for iOS (cibuildwheel)
         env:
           CIBW_PLATFORM: ios
           CIBW_ARCHS: arm64_iphoneos
           CIBW_BUILD: cp315-*
           CIBW_TEST_SKIP: '*'
         run: |
-          python3 -m cibuildwheel --output-dir wheels "$(ls -d src/lz4-*/ | head -1)" 2>&1 | tail -40
+          for p in lz4 zbic; do python3 -m cibuildwheel --output-dir wheels "$(ls -d src/$p-*/ | head -1)" 2>&1 | tail -25; done
           ls -la wheels
-          cd out/site-packages && for w in ../../wheels/*.whl; do unzip -oq "$w"; done && find . -maxdepth 2 -path '*lz4*' | head
+          cd out/site-packages && for w in ../../wheels/*.whl; do unzip -oq "$w"; done && find . -maxdepth 2 \( -path '*lz4*' -o -name 'zbic*' \) | head
+          ls | grep -i zbic
+      - name: fonttools (pure Python)
+        run: |
+          python3 -m pip download --no-deps --only-binary :all: --platform any --python-version 3.12 fonttools -d fwheels
+          cd out/site-packages && for w in ../../fwheels/*.whl; do unzip -oq "$w"; done && ls | grep -i fonttools
       - uses: actions/upload-artifact@v4
         with:
           name: pydeps

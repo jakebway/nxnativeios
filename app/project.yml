@@ -53,4 +53,5 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UIBackgroundModes: [processing]
+        UIBackgroundModes: [processing, audio]
+        BGTaskSchedulerPermittedIdentifiers: [org.nxnativeios.builder.build]

@@ -18,7 +18,7 @@ def upstream():
 
 def _phone_checks(mod):
     def check_prereqs(env, xlate, mac=False):
-        missing = [m for m in ('lz4.block', 'capstone', 'compression.zstd') if not mod._importable(m)]
+        missing = [m for m in ('lz4.block', 'capstone', 'fontTools', 'zbic', 'compression.zstd') if not mod._importable(m)]
         if missing: raise mod.BuildError(f'the app\'s Python is missing modules: {", ".join(missing)} (an nxnativeios packaging fault)')
         mod.check_capstone()
         mod.check_translator(xlate, env)   # dmsh_xlate --source-sha through NxTools.framework

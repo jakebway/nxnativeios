@@ -10,6 +10,8 @@ def run(_arg=''):
         except BaseException as e: ok = False; lines.append(f'❌ {name}: {type(e).__name__}: {e}'.strip()[:400])
     check('Python', lambda: sys.version.split()[0])
     check('zstd (built in)', lambda: __import__('compression.zstd').zstd.decompress(__import__('compression.zstd').zstd.compress(b'ok')).decode())
+    check('zbic', lambda: 'loaded ' + str(__import__('zbic')))
+    check('fonttools', lambda: __import__('fontTools').version)
     check('lz4', lambda: __import__('lz4.block').block.decompress(__import__('lz4.block').block.compress(b'nxnative' * 4)).decode()[:8])
     def cs():
         from . import capfix

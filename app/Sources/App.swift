@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct NXnativeiOSApp: App {
     @State private var engine = BuildEngine()
+    init() { BackgroundKeeper.register() }
     var body: some Scene {
         WindowGroup {
             TabView {

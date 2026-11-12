@@ -74,6 +74,7 @@ final class BuildEngine {
         ]
         try? JSONSerialization.data(withJSONObject: cfg, options: .prettyPrinted).write(to: job.appendingPathComponent("job.json"))
         jobDir = job; running = true; status = JobStatus(state: "running", stage: "starting", progress: 0); logTail = []
+        BackgroundKeeper.shared.begin()
         UIApplication.shared.isIdleTimerDisabled = true   // iOS suspends a background app: keep the screen on while building
         let bundle = Paths.bundle.path, upstream = Paths.upstream.path, jobPath = job.path
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } }
@@ -90,7 +91,7 @@ final class BuildEngine {
 
     private func poll() {
         guard let job = jobDir else { return }
-        if let d = try? Data(contentsOf: job.appendingPathComponent("status.json")), let s = try? JSONDecoder().decode(JobStatus.self, from: d) { status = s }
+        if let d = try? Data(contentsOf: job.appendingPathComponent("status.json")), let s = try? JSONDecoder().decode(JobStatus.self, from: d) { status = s; BackgroundKeeper.shared.update(progress: s.progress ?? 0, stage: s.stage ?? "working") }
         if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("log.txt")) {
             defer { try? h.close() }
             let size = (try? h.seekToEnd()) ?? 0
@@ -110,6 +111,7 @@ final class BuildEngine {
     private func finish(error: String?) {
         timer?.invalidate(); timer = nil; running = false
         UIApplication.shared.isIdleTimerDisabled = false
+        BackgroundKeeper.shared.end(success: error == nil && status?.state == "done")
         if let error { status = JobStatus(state: "failed", stage: nil, progress: nil, ipa: nil, error: error) }
         if status?.state == "done" { for u in gameFiles { try? FileManager.default.removeItem(at: u) }; gameFiles = [] }   // the saved keys stay
     }

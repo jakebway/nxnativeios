@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("showFPS") private var showFPS = true
     @AppStorage("language") private var language = ""
     @AppStorage("keepBuild") private var keepBuild = true
+    @AppStorage("keepAlive") private var keepAlive = true
     @State private var cacheSize = ""
     private let languages = ["": "English (default)", "ja": "Japanese", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "nl": "Dutch",
                              "pt": "Portuguese", "ru": "Russian", "ko": "Korean", "zh-Hans": "Chinese (Simplified)", "zh-Hant": "Chinese (Traditional)"]
@@ -20,6 +21,7 @@ struct SettingsView: View {
                 }
                 Section {
                     Toggle("Keep build files", isOn: $keepBuild)
+                    Toggle("Keep building in the background", isOn: $keepAlive)
                     Button("Clear build files (\(cacheSize))", role: .destructive) {
                         try? FileManager.default.removeItem(at: Paths.jobs); try? FileManager.default.removeItem(at: Paths.imports)
                         Paths.ensure(); measure()
