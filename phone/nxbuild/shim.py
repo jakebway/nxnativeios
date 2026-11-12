@@ -224,7 +224,7 @@ class InProcess:
                  cwd=None, env=None, universal_newlines=None, startupinfo=None, creationflags=0, restore_signals=True, start_new_session=False,
                  pass_fds=(), *, user=None, group=None, extra_groups=None, encoding=None, errors=None, text=None, umask=-1, pipesize=-1, process_group=None):
         if shell or isinstance(args, (str, bytes)): args = ['/bin/sh', '-c', args] if shell else [args]
-        self.args = list(args); self.pid = 0; self.returncode = None
+        self.args = list(args); self.pid = 2147483000; self.returncode = None   # a pid nothing has: a group signal sent to it finds no process, never this app
         self._text = bool(text or universal_newlines or encoding or errors)
         self._enc, self._err = encoding or 'utf-8', errors or 'strict'
         self._spec = (stdin, stdout, stderr); self._env = env; self._cwd = os.fspath(cwd) if cwd else None
@@ -345,6 +345,49 @@ def install(log=None):
     os.environ.setdefault('DM_ALLOW_OTHER_METAL', '1')   # the lock's compiler cannot be on the phone (docs/DESIGN.md)
     _patch_on_import('dmsh_side', _side_patch)
     _patch_on_import('tool_lock', _lock_patch)
+    _patch_on_import('proc_group', _group_patch)
+    _guard_kill()
+
+
+def _guard_kill():
+    """In the phone's one process, a "process group of the command" is this app's own: killpg / kill with pid 0, 1 or this process's own group or pid would end the app (iOS then reports nothing).
+    nxnative's proc_group stops a group with them after each tool run. Such a signal is dropped and written to the log."""
+    real_killpg, real_kill = os.killpg, os.kill
+    def killpg(pgid, sig):
+        if pgid <= 1 or pgid in (os.getpgrp(), os.getpid()):
+            _mark(f'[guard] os.killpg({pgid}, {sig}) dropped'); return
+        return real_killpg(pgid, sig)
+    def kill(pid, sig):
+        if sig != 0 and (pid <= 1 or pid == os.getpid()):
+            _mark(f'[guard] os.kill({pid}, {sig}) dropped'); return
+        return real_kill(pid, sig)
+    os.killpg, os.kill = killpg, kill
+
+
+def _group_patch(m):
+    """proc_group.Group runs a command in a process group of its own and reads its output from a pipe by file descriptor. Here the command has already run in this process (InProcess):
+    its output is in memory, and there is no group to stop."""
+    class Group:
+        def __init__(self, cmd, grace=None, drain=None, **popen):
+            self.grace, self.drain = 5.0 if grace is None else grace, 5.0 if drain is None else drain
+            self.paused, self.stragglers, self.done = False, [], False
+            self.p = subprocess.Popen([str(c) for c in cmd], **{k: v for k, v in popen.items() if k != 'start_new_session'})
+            self.pgid = self.p.pid
+        def __enter__(self): return self
+        def __exit__(self, kind, exc, tb):
+            if self.p.stdout: self.p.stdout.close()
+            return False
+        def pause(self): pass
+        def resume(self): pass
+        def stop(self, sig=None): self.done = True
+        def finish(self): self.p.wait(); self.done = True; return self.p.returncode
+        def lines(self):
+            out = self.p.stdout
+            if out is None: return
+            for ln in out:
+                yield ln.decode('utf-8', 'replace') if isinstance(ln, bytes) else ln
+    m.Group = Group
+    m.members = lambda pgid: []
 
 
 def _lock_patch(m):
