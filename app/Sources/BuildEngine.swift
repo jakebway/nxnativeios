@@ -76,7 +76,7 @@ final class BuildEngine {
                            error: "The app was closed during the last build (usually iOS ending it for memory). The log below shows where it stopped.")
         }
         status = st
-        if let t = try? String(contentsOf: last.appendingPathComponent("log.txt"), encoding: .utf8) {
+        if let t = try? String(contentsOf: last.appendingPathComponent("story.txt"), encoding: .utf8) {
             logTail = Array(t.split(separator: "\n").compactMap { Self.readable(String($0)) }.suffix(250))
         }
     }
@@ -122,7 +122,7 @@ final class BuildEngine {
         polls += 1
         if polls % 15 == 0 { BackgroundKeeper.note("app alive (\(UIApplication.shared.applicationState == .active ? "foreground" : "background"))") }
         if let d = try? Data(contentsOf: job.appendingPathComponent("status.json")), let s = try? JSONDecoder().decode(JobStatus.self, from: d) { status = s; BackgroundKeeper.shared.update(progress: s.progress ?? 0, stage: s.stage ?? "working") }
-        if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("log.txt")) {
+        if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("story.txt")) {
             defer { try? h.close() }
             let size = (try? h.seekToEnd()) ?? 0
             let cut = size > 120_000

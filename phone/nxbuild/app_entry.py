@@ -83,6 +83,7 @@ class Job:
     def __init__(self, d):
         self.dir = Path(d); self.cfg = json.loads((self.dir / 'job.json').read_text())
         self.logf = open(self.dir / 'log.txt', 'a', buffering=1, encoding='utf-8')
+        self.story = open(self.dir / 'story.txt', 'a', buffering=1, encoding='utf-8')   # the lines the app shows: the build's own story, small however long the full log grows
         self.status = {'state': 'running', 'stage': 'starting', 'progress': 0.0}
         self.t0 = time.time()
         self.times_file = Path(self.cfg['upstream']).parent / 'stage_times.json'   # how long each stage took in earlier builds
@@ -93,8 +94,11 @@ class Job:
         self._last_set = 0.0
         self._lock = threading.RLock()
 
+    _QUIET = ('[', 'progress: ', 'frame step', 'function patch', 'shaders: ', 'main {', 'subsdk0 {', 'sdk {', '  File ', '    File ')
+
     def log(self, line):
         self.logf.write(line.rstrip('\n') + '\n')
+        if line.startswith('[RED]') or (line.strip() and not line.startswith(self._QUIET) and '"ev": "progress"' not in line): self.story.write(line.rstrip('\n') + '\n')
         if line.startswith('{"ev"'): self._event(line)
         elif line.startswith('progress: '):
             m = re.match(r'progress: (\d+)/(\d+)\s*$', line)
