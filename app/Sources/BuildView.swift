@@ -44,7 +44,7 @@ struct BuildView: View {
                             }
                             if let d = s.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                             HStack {
-                                Text("Elapsed \(clock(s.elapsed))")
+                                TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s.elapsed))") }
                                 Spacer()
                                 if let e = s.eta, e > 1 { Text("About \(clock(e)) left") }
                             }.font(.caption).foregroundStyle(.secondary).monospacedDigit()

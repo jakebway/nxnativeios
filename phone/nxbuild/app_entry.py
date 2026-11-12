@@ -181,6 +181,12 @@ def watch_memory(job):
             except Exception: pass
             time.sleep(5)
     threading.Thread(target=loop, daemon=True).start()
+    def beat():   # status.json is also rewritten once a second, so the phone's clock and estimate never freeze between events
+        while True:
+            time.sleep(1)
+            try: job.set()
+            except Exception: pass
+    threading.Thread(target=beat, daemon=True).start()
 
 
 def ensure_upstream(zip_path, dest, log):

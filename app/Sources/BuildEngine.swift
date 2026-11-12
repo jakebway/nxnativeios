@@ -85,6 +85,8 @@ final class BuildEngine {
 
     func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); keyFiles.removeAll { $0 == u }; gameFiles.removeAll { $0 == u } }
 
+    var startedAt: Date?
+
     func start() {
         guard !running, !picked.isEmpty else { return }
         let job = Paths.jobs.appendingPathComponent(ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-"))
@@ -96,7 +98,7 @@ final class BuildEngine {
             "upstream_zip": Paths.resources.appendingPathComponent("nxnative.zip").path, "upstream": Paths.upstream.path, "options": options,
         ]
         try? JSONSerialization.data(withJSONObject: cfg, options: .prettyPrinted).write(to: job.appendingPathComponent("job.json"))
-        jobDir = job; running = true; status = JobStatus(state: "running", stage: "starting", progress: 0); logTail = []
+        jobDir = job; running = true; startedAt = .now; status = JobStatus(state: "running", stage: "starting", progress: 0); logTail = []
         BackgroundKeeper.shared.begin(notes: job.appendingPathComponent("bg.txt"))
         UIApplication.shared.isIdleTimerDisabled = true   // iOS suspends a background app: keep the screen on while building
         let bundle = Paths.bundle.path, upstream = Paths.upstream.path, jobPath = job.path
