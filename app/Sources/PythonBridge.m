@@ -1,6 +1,39 @@
 #import <Foundation/Foundation.h>
 #include <Python/Python.h>
 #include "PythonBridge.h"
+#include <signal.h>
+#include <execinfo.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/resource.h>
+
+// ---- the app's process outlives anything a build does ----
+// python3 on a Mac ignores SIGPIPE and SIGXFSZ (CPython's own signal setup); embedded with install_signal_handlers = 0 it does not, and either one ends the app at once with no crash report.
+// Every other way out of the process is written to the build's log (async-signal-safe writes only), so a build that vanishes says how.
+static volatile int g_logfd = -1;
+
+static void say(const char *s) { int fd = g_logfd; if (fd >= 0) write(fd, s, strlen(s)); }
+static void trace(void) { void *f[64]; int n = backtrace(f, 64); int fd = g_logfd; if (fd >= 0) backtrace_symbols_fd(f, n, fd); }
+
+static void on_signal(int sig) {
+    char b[96]; snprintf(b, sizeof b, "\n[fatal] the app received signal %d (%s)\n", sig, sig < NSIG ? sys_signame[sig] : "?");
+    say(b); trace();
+    signal(sig, SIG_DFL); raise(sig);
+}
+
+static void on_exit_called(void) { say("\n[fatal] exit() was called: the app is ending\n"); trace(); }
+
+static void guard_process(void) {
+    static int done; if (done) return; done = 1;
+    signal(SIGPIPE, SIG_IGN); signal(SIGXFSZ, SIG_IGN);
+    int sigs[] = {SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGUSR1, SIGUSR2, SIGALRM, SIGVTALRM, SIGPROF, SIGXCPU, SIGSYS, SIGABRT, SIGTRAP, SIGEMT};
+    for (size_t i = 0; i < sizeof sigs / sizeof *sigs; i++) {
+        struct sigaction sa = {0}; sa.sa_handler = on_signal; sigemptyset(&sa.sa_mask); sigaction(sigs[i], &sa, NULL);
+    }
+    atexit(on_exit_called);
+}
 
 static int g_started;
 
@@ -41,6 +74,16 @@ int nxb_python_start(const char *bundle, const char *upstream, char *err, int er
 }
 
 int nxb_python_build(const char *job_dir) {
+    guard_process();
+    char path[2048]; snprintf(path, sizeof path, "%s/log.txt", job_dir);
+    int fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
+    if (fd >= 0) {
+        struct rlimit r; char b[200];
+        getrlimit(RLIMIT_FSIZE, &r); snprintf(b, sizeof b, "[limits] file size %llu, ", (unsigned long long)r.rlim_cur); write(fd, b, strlen(b));
+        getrlimit(RLIMIT_NOFILE, &r); snprintf(b, sizeof b, "open files %llu, ", (unsigned long long)r.rlim_cur); write(fd, b, strlen(b));
+        getrlimit(RLIMIT_STACK, &r); snprintf(b, sizeof b, "stack %llu\n", (unsigned long long)r.rlim_cur); write(fd, b, strlen(b));
+        int old = g_logfd; g_logfd = fd; if (old >= 0) close(old);
+    }
     PyGILState_STATE g = PyGILState_Ensure();
     int rc = 1;
     PyObject *m = PyImport_ImportModule("nxbuild.app_entry");
