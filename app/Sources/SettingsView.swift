@@ -44,6 +44,11 @@ struct SettingsView: View {
                         ShareLink(item: r) { Label("Share report", systemImage: "square.and.arrow.up") }
                     }
                 } header: { Text("Check") } footer: { Text("Checks Python and every tool a build needs, without a game. Takes a few seconds.") }
+                if let l = engine.lastLogURL {
+                    Section {
+                        ShareLink(item: l) { Label("Share the full log of the last build", systemImage: "square.and.arrow.up") }
+                    } header: { Text("Diagnostics") } footer: { Text("Everything the last build wrote, for when something went wrong (memory, timing, where it stopped).") }
+                }
                 if FileManager.default.fileExists(atPath: CrashReports.file.path) {
                     Section {
                         ShareLink(item: CrashReports.file) { Label("Share what iOS reported", systemImage: "square.and.arrow.up") }

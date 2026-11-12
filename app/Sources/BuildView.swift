@@ -64,7 +64,7 @@ struct BuildView: View {
                 Label(s.error ?? "The build stopped", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
             }
         }
-        if !engine.logTail.isEmpty { Section { DisclosureGroup("Log") { logBox }; if let l = engine.logURL { ShareLink(item: l) { Label("Share full log", systemImage: "square.and.arrow.up") } } } }
+        if !engine.logTail.isEmpty { Section { DisclosureGroup("Log") { logBox } } }
     }
 
     @ViewBuilder private var logSection: some View {

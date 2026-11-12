@@ -79,7 +79,6 @@ final class BuildEngine {
         if let t = try? String(contentsOf: last.appendingPathComponent("log.txt"), encoding: .utf8) {
             logTail = Array(t.split(separator: "\n").compactMap { Self.readable(String($0)) }.suffix(250))
         }
-        if let n = try? String(contentsOf: last.appendingPathComponent("bg.txt"), encoding: .utf8) { logTail += n.split(separator: "\n").map(String.init) }
     }
 
     func forgetKeys() { for u in keyFiles { try? FileManager.default.removeItem(at: u) }; keyFiles = [] }
@@ -138,11 +137,17 @@ final class BuildEngine {
 
     /// A log line as a person reads it: progress events are for the bar, so they are left out here.
     nonisolated static func readable(_ line: String) -> String? {
-        if line.hasPrefix("progress: ") || line.hasPrefix("[where") || line.contains("\"ev\": \"progress\"") { return nil }
+        // The app's log is the build's story only (what was read, each step, what went wrong); everything for debugging stays in the full log (Settings → Diagnostics).
+        if line.hasPrefix("[") && !line.hasPrefix("[RED]") { return nil }                                  // [where], [memory], [bg], [py], [limits], [fatal] ...
+        if line.hasPrefix("progress: ") || line.hasPrefix("frame step") || line.hasPrefix("function patch") || line.hasPrefix("    File ") || line.hasPrefix("  File ") { return nil }
+        if line.contains("\"ev\": \"progress\"") || line.hasPrefix("shaders: ") || line.hasPrefix("main {") || line.hasPrefix("subsdk0 {") || line.hasPrefix("sdk {") { return nil }
+        if !line.hasPrefix("{\"ev\"") { let ok = ["input:", "keys:", "game:", "rar:", "done:", "unpacking nxnative", "Traceback", "RuntimeError", "BuildError"]; if !ok.contains(where: { line.hasPrefix($0) }) { return nil } }
         guard line.hasPrefix("{\"ev\""), let j = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return line.isEmpty ? nil : line }
         let name = j["name"] as? String ?? ""
         switch j["ev"] as? String {
-        case "say": return j["msg"] as? String
+        case "say":
+            let m = j["msg"] as? String ?? ""
+            return (m.contains("work folder") || m.contains("output IPA") || m.contains("Documents/env.txt")) ? nil : m
         case "stage": return "▶ \(name)"
         case "step": let st = j["step"] as? String ?? ""; return st.isEmpty ? nil : "    \(st)"
         case "stage_end":
@@ -174,6 +179,12 @@ final class BuildEngine {
     }
 
     var logURL: URL? { jobDir?.appendingPathComponent("log.txt") }
+    /// The newest job's complete log (also after a restart), for the Diagnostics section.
+    var lastLogURL: URL? {
+        let dirs = (try? FileManager.default.contentsOfDirectory(at: Paths.jobs, includingPropertiesForKeys: nil))?.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard let u = dirs?.last?.appendingPathComponent("log.txt"), FileManager.default.fileExists(atPath: u.path) else { return nil }
+        return u
+    }
 
     var selfTest: String?
     func runSelfTest() {
