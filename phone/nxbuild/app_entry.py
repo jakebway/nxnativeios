@@ -8,7 +8,7 @@
 Inputs are .zip files and/or single files (no folder picker): keys are the file named prod.keys (else the one *.keys file), the game
 is every .nsp/.xci/.nsz/.xcz (base game, update, DLC), or one .nup file (needs no keys).
 """
-import io, json, os, re, shutil, subprocess, sys, time, traceback, zipfile
+import threading, io, json, os, re, shutil, subprocess, sys, time, traceback, zipfile
 from pathlib import Path
 
 GAME_EXT = ('.nsp', '.xci', '.nsz', '.xcz', '.nup')   # .nup: a Switch 2 game in one NUP container (base, updates, DLC); it needs no keys
@@ -91,6 +91,7 @@ class Job:
         self.done_stages = {}       # key -> seconds, this build
         self.stage_t0 = None; self.frac = 0.0
         self._last_set = 0.0
+        self._lock = threading.RLock()
 
     def log(self, line):
         self.logf.write(line.rstrip('\n') + '\n')
@@ -161,8 +162,12 @@ class Job:
         except OSError: pass
 
     def set(self, **kw):
-        self.status.update(kw); self.status['elapsed'] = round(time.time() - self.t0)
-        tmp = self.dir / 'status.json.tmp'; tmp.write_text(json.dumps(self.status)); os.replace(tmp, self.dir / 'status.json')
+        """status.json for the app: written under a lock (the heartbeat thread and the build both write), and a failed write never reaches the build."""
+        with self._lock:
+            self.status.update(kw); self.status['elapsed'] = round(time.time() - self.t0)
+            try:
+                tmp = self.dir / 'status.json.tmp'; tmp.write_text(json.dumps(self.status)); os.replace(tmp, self.dir / 'status.json')
+            except OSError: pass
 
 
 def watch_memory(job):
