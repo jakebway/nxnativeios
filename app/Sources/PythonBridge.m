@@ -11,6 +11,7 @@
 #include <pthread.h>
 #include <mach/mach.h>
 #include <time.h>
+#import <ImageIO/ImageIO.h>
 
 // ---- the app's process outlives anything a build does ----
 // python3 on a Mac ignores SIGPIPE and SIGXFSZ (CPython's own signal setup); embedded with install_signal_handlers = 0 it does not, and either one ends the app at once with no crash report.
@@ -138,4 +139,30 @@ char *nxb_python_selftest(void) {
     }
     PyGILState_Release(g);
     return out;
+}
+
+/// The game's icon (a JPEG from its control data) as a square PNG of `px` pixels, for the IPA's home-screen icon. Python has no Pillow on the phone and calls this through ctypes.
+__attribute__((used, visibility("default")))
+int nxb_icon_png(const char *src, const char *dst, int px) {
+    @autoreleasepool {
+        NSURL *in = [NSURL fileURLWithPath:[NSString stringWithUTF8String:src]];
+        CGImageSourceRef is = CGImageSourceCreateWithURL((__bridge CFURLRef)in, NULL);
+        if (!is) return 1;
+        CGImageRef im = CGImageSourceCreateImageAtIndex(is, 0, NULL); CFRelease(is);
+        if (!im) return 2;
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef cg = CGBitmapContextCreate(NULL, px, px, 8, 0, cs, kCGImageAlphaNoneSkipLast);   // opaque: iOS icons have no alpha
+        CGColorSpaceRelease(cs);
+        if (!cg) { CGImageRelease(im); return 3; }
+        CGContextSetInterpolationQuality(cg, kCGInterpolationHigh);
+        CGContextDrawImage(cg, CGRectMake(0, 0, px, px), im);
+        CGImageRef out = CGBitmapContextCreateImage(cg); CGContextRelease(cg); CGImageRelease(im);
+        if (!out) return 4;
+        NSURL *to = [NSURL fileURLWithPath:[NSString stringWithUTF8String:dst]];
+        CGImageDestinationRef d = CGImageDestinationCreateWithURL((__bridge CFURLRef)to, CFSTR("public.png"), 1, NULL);
+        if (!d) { CGImageRelease(out); return 5; }
+        CGImageDestinationAddImage(d, out, NULL);
+        bool ok = CGImageDestinationFinalize(d); CFRelease(d); CGImageRelease(out);
+        return ok ? 0 : 6;
+    }
 }

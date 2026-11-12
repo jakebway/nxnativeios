@@ -70,6 +70,17 @@ def chain_version(repo):
     raise AssembleError('no DMSH_CHAIN in dmsh_chain.h')
 
 
+def _app_icon(icon, app, log):
+    """The app's own nxb_icon_png (ImageIO) writes the 120 and 180 px PNGs from the game's JPEG: no Pillow on the phone"""
+    try:
+        import ctypes
+        f = ctypes.CDLL(None).nxb_icon_png; f.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+        ok = all(f(str(icon).encode(), str(app / n).encode(), px) == 0 for px, n in ((120, 'NXIcon60x60@2x.png'), (180, 'NXIcon60x60@3x.png')))
+        if ok: _say(log, f'app icon: the game\'s own ({Path(icon).name})')
+        return ok
+    except (AttributeError, OSError): return False
+
+
 def icon_pngs(icon, app, log=None):
     """The game icon as PNG files named in CFBundleIcons (the shell has no compiled asset catalog for it). UIKit scales the 120 / 180 px files."""
     try:
@@ -83,6 +94,7 @@ def icon_pngs(icon, app, log=None):
         im = Image.open(icon).convert('RGB')
         for px, n in ((120, 'NXIcon60x60@2x.png'), (180, 'NXIcon60x60@3x.png')): im.resize((px, px)).save(app / n)
         names = ['NXIcon60x60']
+    elif icon and Path(icon).is_file() and _app_icon(icon, app, log): names = ['NXIcon60x60']
     else: _say(log, 'no icon PNG: the home-screen icon will be blank')
     return names
 

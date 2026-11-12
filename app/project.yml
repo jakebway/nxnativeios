@@ -35,6 +35,8 @@ targets:
       - framework: Frameworks/capstone.framework
         embed: true
         link: false   # loaded by Python's ctypes at run time
+      - sdk: ImageIO.framework
+      - sdk: CoreGraphics.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.nxnativeios.builder

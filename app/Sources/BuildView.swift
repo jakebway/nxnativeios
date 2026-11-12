@@ -16,7 +16,7 @@ struct BuildView: View {
 
     /// Nothing building: the game to pick, the Build button, and how the last build ended.
     @ViewBuilder private var idle: some View {
-        if let s = engine.status, s.state != "running" { result(s) }
+        if let s = engine.status, s.state != "running", s.state != "done" || FileManager.default.fileExists(atPath: s.ipa ?? "") { result(s) }
         Section {
             Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }
             ForEach(engine.gameFiles, id: \.self) { row($0) }
@@ -69,7 +69,10 @@ struct BuildView: View {
                         ShareLink(item: url) { Label("Share to FlareStore", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                     }
-                    Button("See it in IPAs") { engine.tab = 1 }.font(.subheadline)
+                    HStack(spacing: 24) {
+                        Button("See it in IPAs") { engine.tab = 1 }
+                        Button("Dismiss", role: .cancel) { engine.status = nil }.foregroundStyle(.secondary)
+                    }.font(.subheadline).buttonStyle(.borderless)
                 }.frame(maxWidth: .infinity).padding(.vertical, 8)
             }
         } else {
@@ -77,6 +80,7 @@ struct BuildView: View {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 40)).foregroundStyle(.red)
                     Text(s.error ?? "The build stopped").font(.subheadline).multilineTextAlignment(.center)
+                    Button("Dismiss", role: .cancel) { engine.status = nil }.font(.subheadline).buttonStyle(.borderless).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity).padding(.vertical, 8)
             }
         }
