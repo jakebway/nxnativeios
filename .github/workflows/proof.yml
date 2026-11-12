@@ -17,7 +17,7 @@ jobs:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
-      - run: git clone --depth 1 https://github.com/seedds/nxnative.git upstream
+      - run: git clone https://github.com/seedds/nxnative.git upstream && git -C upstream checkout 7c384e7
       - run: cd upstream && git apply ../patches/*.patch
       - run: cd upstream && python3 dm/ios/tools/compile_check.py
         env:

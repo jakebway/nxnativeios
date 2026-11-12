@@ -23,7 +23,7 @@ jobs:
           glslangValidator -V tools/testdata/test.frag -o test.spv
       - name: Shim against nxnative's scripts
         run: NXB_FRAMEWORKS=$PWD/fw python phone/tests/test_shim.py upstream test.spv
-      - name: Driver through nxnative's build script (no game: must stop at the game scan)
+      - name: "Driver through nxnative build script (no game, must stop at the game scan)"
         run: |
           mkdir -p nogame && echo x > nogame/readme.txt && echo "x = 00" > nokeys
           cd phone && NXB_UPSTREAM=$PWD/../upstream NXB_FRAMEWORKS=$PWD/../fw python -c "
