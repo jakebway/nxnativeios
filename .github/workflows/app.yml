@@ -71,7 +71,11 @@ jobs:
           mkdir -p pyapp/app_packages pyapp/app
           cp -R art/pydeps/site-packages/. pyapp/app_packages/
           # capstone names its library by sys.platform; on iOS that is 'ios', so it would look for libcapstone.so instead of the framework's libcapstone.dylib
-          sed -i "s/^if sys.platform == 'darwin':/if sys.platform in ('darwin', 'ios'):/" pyapp/app_packages/capstone/__init__.py
+          python3 - <<'PYEOF'
+          p = 'pyapp/app_packages/capstone/__init__.py'; t = open(p).read()
+          assert "if sys.platform == 'darwin':" in t
+          open(p, 'w').write(t.replace("if sys.platform == 'darwin':", "if sys.platform in ('darwin', 'ios'):", 1))
+          PYEOF
           grep -q "('darwin', 'ios')" pyapp/app_packages/capstone/__init__.py
           cp -R phone/nxbuild pyapp/app/nxbuild && cp tools/mkgameframework.py pyapp/app/nxbuild/
           find pyapp -name '*.so' | head
