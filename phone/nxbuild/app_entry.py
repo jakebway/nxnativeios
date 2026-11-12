@@ -190,14 +190,16 @@ def _trace_exits(job):
     except Exception: pass
     def loop():   # where the build is, once its position changes: a build that vanishes leaves its last position
         last = None; n = 0
+        try: f = ctypes.CDLL(None).os_proc_available_memory; f.restype = ctypes.c_size_t
+        except (OSError, AttributeError): f = None
         while n < 600:
-            time.sleep(1)
+            time.sleep(0.25)
             try:
                 fr = sys._current_frames().get(me)
                 if fr is None: continue
                 st = traceback.extract_stack(fr)[-3:]
                 pos = ' < '.join(f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in reversed(st))
-                if pos != last: job.logf.write(f'[where] {pos}\n'); job.logf.flush(); last = pos; n += 1
+                if pos != last: job.logf.write(f'[where] {pos}' + (f' | {f() / 1e6:,.0f} MB free' if f else '') + '\n'); job.logf.flush(); last = pos; n += 1
             except Exception: pass
     threading.Thread(target=loop, daemon=True).start()
 

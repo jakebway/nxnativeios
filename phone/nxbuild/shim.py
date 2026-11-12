@@ -127,6 +127,13 @@ def _zstd(args, out_bin, stdin):
 
 
 # ---- Python scripts ----
+def _set_environ(want):
+    """Make os.environ equal to want by changing only what differs: clearing and refilling it all frees and rebuilds the process's environment while the app's other threads read it."""
+    for k in [k for k in os.environ if k not in want]: del os.environ[k]
+    for k, v in want.items():
+        if os.environ.get(k) != v: os.environ[k] = v
+
+
 def _python(args, out, env, cwd):
     a = list(args)
     while a and a[0] in ('-I', '-u', '-B', '-E', '-s', '-S', '-O'): a = a[1:]
@@ -143,7 +150,7 @@ def _python(args, out, env, cwd):
         saved = (sys.argv, list(sys.path), dict(os.environ), os.getcwd())
         sys.argv = argv
         if argv and argv[0] not in ('-c',) and os.path.isfile(argv[0]): sys.path.insert(0, os.path.dirname(argv[0]))
-        if env is not None: os.environ.clear(); os.environ.update(env)
+        if env is not None: _set_environ(env)
         if cwd: os.chdir(cwd)
         code = 0
         try:
@@ -155,7 +162,7 @@ def _python(args, out, env, cwd):
             import traceback; out.write(traceback.format_exc()); code = 1
         finally:
             sys.argv, sys.path[:] = saved[0], saved[1]
-            os.environ.clear(); os.environ.update(saved[2]); os.chdir(saved[3])
+            _set_environ(saved[2]); os.chdir(saved[3])
         return code
 
 
