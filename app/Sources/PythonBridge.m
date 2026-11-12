@@ -35,7 +35,7 @@ static void on_exit_called(void) { say("\n[fatal] exit() was called: the app is 
 // or Python is stuck (they go on), and what the app's memory footprint (the number iOS closes an app by) was.
 static void *heartbeat(void *arg) {
     for (;;) {
-        sleep(2);
+        sleep(1);
         task_vm_info_data_t vi; mach_msg_type_number_t cnt = TASK_VM_INFO_COUNT; mach_port_t self = mach_task_self();
         thread_act_array_t th; mach_msg_type_number_t nth = 0; task_threads(self, &th, &nth);
         for (mach_msg_type_number_t i = 0; i < nth; i++) mach_port_deallocate(self, th[i]);

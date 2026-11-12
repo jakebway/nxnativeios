@@ -193,7 +193,8 @@ def _trace_exits(job):
         try: f = ctypes.CDLL(None).os_proc_available_memory; f.restype = ctypes.c_size_t
         except (OSError, AttributeError): f = None
         while True:
-            time.sleep(0.5)
+            from . import shim as _shim
+            time.sleep(0.05 if time.time() < _shim.FAST_UNTIL else 0.5)
             try:
                 fr = sys._current_frames().get(me)
                 pos = 'build thread gone' if fr is None else ' < '.join(f'{Path(x.filename).name}:{x.lineno} {x.name}' for x in reversed(traceback.extract_stack(fr)[-3:]))

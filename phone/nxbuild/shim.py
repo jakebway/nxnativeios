@@ -14,12 +14,14 @@ each command in this process:
 and multiprocessing pools with ThreadPool below (threads, no multiprocessing machinery): iOS has no fork.
 Anything else fails with exit code 127 and says so.
 """
+import time
 import contextlib, ctypes, io, os, runpy, shutil, subprocess, sys, tempfile, threading, types
 
 PIPE, STDOUT, DEVNULL = subprocess.PIPE, subprocess.STDOUT, subprocess.DEVNULL
 _RealPopen = subprocess.Popen
 _py_lock = threading.RLock()      # Python scripts share sys.argv / sys.stdout / os.environ / cwd: one at a time
 _tool_locks = {}                  # NxTools' tools share Console: one call at a time per framework
+FAST_UNTIL = 0.0
 LOG = None                        # optional callable(line): every line any command prints, as it comes (the app's live log)
 FRAMEWORKS = os.environ.get('NXB_FRAMEWORKS') or os.path.join(os.path.dirname(sys.executable), 'Frameworks')
 METAL_VERSION = 'nxnativeios on-device Metal (MSL compiled at run time)'
@@ -136,6 +138,8 @@ def _set_environ(want):
 
 def _mark(line):
     """A position marker for the app's log only: never in the output a script reads"""
+    global FAST_UNTIL
+    if line.startswith('[py] leaving'): FAST_UNTIL = time.time() + 20   # the position sampler looks every 0.05 s for a while after a script ends
     if LOG: LOG(line)
 
 
