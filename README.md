@@ -17,6 +17,6 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the whole pipeline.
 - [x] CI: per-profile player shells (no game data), release `shells`
 - [x] `NxTools.framework`: NSP/XCI extraction (your `prod.keys`) and shader translation
 - [x] `SpirvCross.framework`: SPIR-V to Metal source
-- [ ] Embedded Python + nxnative's build scripts on the phone
-- [ ] Game IPA assembler (replaces xcodebuild)
-- [ ] Builder app UI (Build / IPAs / Settings)
+- [x] Embedded Python + nxnative's build scripts on the phone (runs unpack, check, rewrite and the shader split on the phone; a later step still ends the build early, being fixed)
+- [ ] Game IPA assembler (replaces xcodebuild): written, not yet run end to end on a phone
+- [x] Builder app UI (Build / IPAs / Settings), with keys saved once, split zip and RAR input, background building
