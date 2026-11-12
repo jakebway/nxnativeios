@@ -8,16 +8,22 @@ struct BuildView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
-                    ForEach(engine.keyFiles, id: \.self) { row($0) }
-                } header: { Text("1. Keys") } footer: {
-                    Text("Pick prod.keys. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both. Switch 2 games (.nup) need no keys.")
+                if engine.keyFiles.isEmpty {
+                    Section {
+                        Button { DocPicker.present { engine.add($0, keys: true) } } label: { Label("Add keys", systemImage: "key.fill") }.disabled(engine.running)
+                    } header: { Text("1. Keys (once)") } footer: {
+                        Text("Pick prod.keys. They are saved on this phone, so you do this only once. Title keys (title.keys) are optional: most .nsp files carry their own. You can also pick one .zip that holds both. Switch 2 games (.nup) need no keys.")
+                    }
+                } else {
+                    Section {
+                        Label("Keys saved on this phone", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                            .swipeActions { if !engine.running { Button("Forget keys", role: .destructive) { engine.forgetKeys() } } }
+                    } footer: { Text("Swipe left to forget them.") }
                 }
                 Section {
                     Button { DocPicker.present { engine.add($0, keys: false) } } label: { Label("Add game", systemImage: "gamecontroller.fill") }.disabled(engine.running)
                     ForEach(engine.gameFiles, id: \.self) { row($0) }
-                } header: { Text("2. Game") } footer: {
+                } header: { Text(engine.keyFiles.isEmpty ? "2. Game" : "Game") } footer: {
                     Text("Pick the .nsp, .xci or .nup, or a .zip of it. Split archives (.zip.001 / .z01 / .part1.rar / .r00 ...): pick all the parts at once. Add the update and DLC here too. Then tap Build: the rest is automatic. Nothing leaves this phone.")
                 }
                 Section {

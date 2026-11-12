@@ -21,10 +21,11 @@ enum Paths {
     static let ipas = documents.appendingPathComponent("IPAs", isDirectory: true)
     static let jobs = support.appendingPathComponent("Jobs", isDirectory: true)
     static let imports = support.appendingPathComponent("Imports", isDirectory: true)
+    static let keys = support.appendingPathComponent("Keys", isDirectory: true)   // the keys the user entered once; they stay on the phone
     static let upstream = support.appendingPathComponent("nxnative", isDirectory: true)
     static let bundle = Bundle.main.bundleURL
     static let resources = Bundle.main.resourceURL!.appendingPathComponent("NXData")
     static func ensure() {
-        for d in [ipas, jobs, imports] { try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        for d in [ipas, jobs, imports, keys] { try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
     }
 }
