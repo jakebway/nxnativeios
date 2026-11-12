@@ -20,9 +20,12 @@ static volatile int g_logfd = -1;
 static void say(const char *s) { int fd = g_logfd; if (fd >= 0) write(fd, s, strlen(s)); }
 static void trace(void) { void *f[64]; int n = backtrace(f, 64); int fd = g_logfd; if (fd >= 0) backtrace_symbols_fd(f, n, fd); }
 
-static void on_signal(int sig) {
-    char b[96]; snprintf(b, sizeof b, "\n[fatal] the app received signal %d (%s)\n", sig, sig < NSIG ? sys_signame[sig] : "?");
+// Who sends it: the signal's sender (si_pid; 0 = the kernel or the system) is written to the log.
+static void on_signal(int sig, siginfo_t *info, void *ctx) {
+    char b[160]; snprintf(b, sizeof b, "\n[fatal] the app received signal %d (%s) from pid %d, code %d\n", sig, sig < NSIG ? sys_signame[sig] : "?", info ? info->si_pid : -1, info ? info->si_code : -1);
     say(b); trace();
+    // A polite request to end (SIGTERM and friends) is not what ends a build on a phone: iOS ends apps with SIGKILL, which cannot be caught. Something sent this one in the middle of a build: ignored.
+    if (sig == SIGTERM || sig == SIGHUP || sig == SIGINT || sig == SIGQUIT || sig == SIGUSR1 || sig == SIGUSR2 || sig == SIGALRM) { say("[fatal] ignored: the build goes on\n"); return; }
     signal(sig, SIG_DFL); raise(sig);
 }
 
@@ -50,7 +53,7 @@ static void guard_process(void) {
     signal(SIGPIPE, SIG_IGN); signal(SIGXFSZ, SIG_IGN);
     int sigs[] = {SIGTERM, SIGHUP, SIGINT, SIGQUIT, SIGUSR1, SIGUSR2, SIGALRM, SIGVTALRM, SIGPROF, SIGXCPU, SIGSYS, SIGABRT, SIGTRAP, SIGEMT, SIGSEGV, SIGBUS, SIGILL, SIGFPE};
     for (size_t i = 0; i < sizeof sigs / sizeof *sigs; i++) {
-        struct sigaction sa = {0}; sa.sa_handler = on_signal; sigemptyset(&sa.sa_mask); sigaction(sigs[i], &sa, NULL);
+        struct sigaction sa = {0}; sa.sa_sigaction = on_signal; sa.sa_flags = SA_SIGINFO; sigemptyset(&sa.sa_mask); sigaction(sigs[i], &sa, NULL);
     }
     atexit(on_exit_called);
     pthread_t th; pthread_create(&th, NULL, heartbeat, NULL); pthread_detach(th);

@@ -134,7 +134,7 @@ class Job:
         elif kind == 'stage_end':
             key = stage_key(ev.get('name')); self.done_stages[key] = float(ev.get('elapsed') or 0); self.frac = 1.0
             self.status['key'] = ''
-            self.set(progress=self._overall())
+            self.set(progress=self._overall(), detail='', eta=None)
         elif kind == 'progress':
             done, total = ev.get('done'), ev.get('total')
             if total: self.stage_total = (total, ev.get('unit') or '')   # an estimate from the stage's first event, kept for the ones that omit it
