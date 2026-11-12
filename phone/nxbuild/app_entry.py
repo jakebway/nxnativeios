@@ -312,6 +312,12 @@ def base_title(keys, game_dir, log):
 
 def run(job_dir):
     job = Job(job_dir)
+    import signal   # the tools install a SIGTERM handler; off the interpreter's main thread that raises, and there is nothing to terminate here anyway
+    _sig = signal.signal
+    def _safe_signal(num, handler):
+        try: return _sig(num, handler)
+        except ValueError: return signal.SIG_DFL
+    signal.signal = _safe_signal
     watch_memory(job)
     try:   # a crash in native code leaves no Python error: its message and the Python stacks go to the log instead
         import faulthandler
