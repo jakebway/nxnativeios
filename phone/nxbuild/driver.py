@@ -27,6 +27,47 @@ def _phone_checks(mod):
     mod.check_ios_sdk = lambda env: None
 
 
+def _trace_steps(mod):
+    """Marks (into the full log only) around the script's helper steps, and a chunked file hash: the script hashes every file of a package with read_bytes(), a whole file in memory at once."""
+    import functools, hashlib, time
+    def wrap(name):
+        f = getattr(mod, name, None)
+        if not callable(f): return
+        @functools.wraps(f)
+        def w(*a, **k):
+            shim._mark(f'[step {time.strftime("%H:%M:%S")}] {name} ...')
+            r = f(*a, **k)
+            shim._mark(f'[step {time.strftime("%H:%M:%S")}] {name} done')
+            return r
+        setattr(mod, name, w)
+    for n in ('split_shaders', 'package_key', 'split_output_key', 'swap_in', 'data_rows', 'table_difference', 'dlc_only_shader_change', 'compute_reader_additions',
+              'rmtree', 'reused', 'files_under', 'build_vk_shaders', 'build_gl_shaders', 'build_ios_shaders', 'capture_shaders', 'chain_header', 'provisional_prep', 'refine_after_rewrite'):
+        if n not in ('files_under', 'reused', 'data_rows'): wrap(n)
+    def fingerprint(*items, env=None):   # the script's own, but each file is hashed in chunks and a big one is logged
+        h = hashlib.sha256()
+        for it in items:
+            kind, v = it if isinstance(it, tuple) and len(it) == 2 and it[0] in ('files', 'tree', 'stat', 'cmd') else ('repr', it)
+            h.update(f'\0{kind}\0'.encode())
+            if kind == 'files':
+                for p in map(mod.rfs.Path, v):
+                    h.update(p.name.encode() + b'\0')
+                    try:
+                        d = hashlib.sha256(); n = 0
+                        with open(p, 'rb') as f:
+                            while c := f.read(1 << 20): d.update(c); n += len(c)
+                        if n > 200 << 20: shim._mark(f'[step] hashed {p.name}: {n >> 20} MB')
+                        h.update(d.digest())
+                    except OSError: h.update(b'missing')
+            elif kind in ('tree', 'stat'):
+                for rel, st in mod.files_under(v): h.update(f'{rel}\0{st.st_size}\0{st.st_mtime_ns if kind == "stat" else ""}\n'.encode())
+            elif kind == 'cmd':
+                try: r = mod.subprocess.run(v, env=env, capture_output=True, text=True, timeout=120); h.update((r.stdout + r.stderr).encode())
+                except (OSError, mod.subprocess.TimeoutExpired): h.update(b'missing')
+            else: h.update(repr(v).encode())
+        return h.hexdigest()
+    mod.fingerprint = fingerprint
+
+
 def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):
     repo = upstream()
     shim.install(log=log)
@@ -39,6 +80,7 @@ def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):
     sys.path.insert(0, str(script.parent))
     spec.loader.exec_module(mod)
     _phone_checks(mod)
+    _trace_steps(mod)
     argv = [str(game_dir), *(['-k', str(keys)] if keys else []), '--gpu', 'none', '--allow-other-metal', '--progress', 'json', *extra]
     if out_dir: argv += ['--work-dir', str(Path(out_dir) / 'build')]
     return mod.cli(argv)
