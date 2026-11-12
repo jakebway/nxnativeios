@@ -15,7 +15,7 @@ and multiprocessing pools with ThreadPool below (threads, no multiprocessing mac
 Anything else fails with exit code 127 and says so.
 """
 import time
-import contextlib, ctypes, io, os, runpy, shutil, subprocess, sys, tempfile, threading, types
+import json, contextlib, ctypes, io, os, runpy, shutil, subprocess, sys, tempfile, threading, types
 
 PIPE, STDOUT, DEVNULL = subprocess.PIPE, subprocess.STDOUT, subprocess.DEVNULL
 _RealPopen = subprocess.Popen
@@ -164,6 +164,8 @@ def _python(args, out, env, cwd):
     else:
         script = os.path.abspath(a[0]) if cwd is None else os.path.abspath(os.path.join(cwd, a[0]))
         argv = [script, *a[1:]]; target = lambda: runpy.run_path(script, run_name='__main__')
+    _what = {'c1_guard.py': 'checking shader memory reads (several minutes, no counter)', 'cb_extent.py': 'measuring shader uniform reads (several minutes, no counter)'}.get(os.path.basename(a[0]))
+    if _what: out.write(json.dumps({'ev': 'step', 'step': _what}) + '\n')
     with _py_lock:
         saved = (sys.argv, list(sys.path), dict(os.environ), os.getcwd())
         sys.argv = argv

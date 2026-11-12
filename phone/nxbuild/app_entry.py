@@ -129,6 +129,10 @@ class Job:
 
     def _event2(self, ev):
         kind = ev.get('ev'); k, n = ev.get('k'), ev.get('n') or self.status.get('n')
+        if kind == 'stage' and stage_key(ev.get('name')) == 'rewrite':
+            self.free('input/game', 'the game file copy (its contents are unpacked)')
+        if kind == 'stage_end' and stage_key(ev.get('name')).startswith('ios shaders'):
+            for d in (self.dir / 'build').glob('*/shader/pkg*'): self.free(d, 'the shader package')
         if kind == 'stage':
             key = stage_key(ev.get('name')); self.frac = 0.0; self.stage_t0 = time.time(); self.stage_total = None
             self.status.update(stage=ev.get('name') or self.status['stage'], key=key, k=k, n=n, step='', detail='', eta=None)
@@ -155,6 +159,15 @@ class Job:
             if time.time() - self._last_set >= 1.0:   # the app polls once a second
                 self._last_set = time.time()
                 self.set(progress=self._overall(), detail=detail, eta=eta, step=ev.get('step') or self.status.get('step', ''))
+
+    def free(self, what, note):
+        """Disk space back as soon as nothing needs a file any more: a big game takes 100 GB of work files if they all stay until the end."""
+        try:
+            p = self.dir / what if isinstance(what, str) else what
+            n = sum(f.stat().st_size for f in p.rglob('*') if f.is_file()) if p.is_dir() else (p.stat().st_size if p.exists() else 0)
+            shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+            if n: self.log(f'[cleanup] freed {n / 1e9:.1f} GB: {note}')
+        except Exception: pass
 
     def finish_times(self):
         """Remember how long each stage took, for the next build's progress bar."""
