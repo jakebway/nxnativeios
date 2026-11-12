@@ -40,9 +40,6 @@ def _trace_steps(mod):
             shim._mark(f'[step {time.strftime("%H:%M:%S")}] {name} done')
             return r
         setattr(mod, name, w)
-    for n in ('split_shaders', 'package_key', 'split_output_key', 'swap_in', 'data_rows', 'table_difference', 'dlc_only_shader_change', 'compute_reader_additions',
-              'rmtree', 'reused', 'files_under', 'build_vk_shaders', 'build_gl_shaders', 'build_ios_shaders', 'capture_shaders', 'chain_header', 'provisional_prep', 'refine_after_rewrite'):
-        if n not in ('files_under', 'reused', 'data_rows'): wrap(n)
     def fingerprint(*items, env=None):   # the script's own, but each file is hashed in chunks and a big one is logged
         h = hashlib.sha256()
         for it in items:
@@ -66,6 +63,12 @@ def _trace_steps(mod):
             else: h.update(repr(v).encode())
         return h.hexdigest()
     mod.fingerprint = fingerprint
+    def package_key(pkg):   # file names and sizes, not their bytes: a phone does not read a multi-GB package again just to name it
+        return mod.fingerprint([(rel, st.st_size) for rel, st in mod.files_under(pkg)])
+    mod.package_key = package_key
+    for n in ('split_shaders', 'package_key', 'split_output_key', 'swap_in', 'data_rows', 'table_difference', 'dlc_only_shader_change', 'compute_reader_additions',
+              'reused', 'files_under', 'build_vk_shaders', 'build_gl_shaders', 'build_ios_shaders', 'capture_shaders', 'chain_header', 'provisional_prep', 'refine_after_rewrite'):
+        if n not in ('files_under', 'reused', 'data_rows'): wrap(n)
 
 
 def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):

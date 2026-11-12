@@ -136,6 +136,15 @@ def _set_environ(want):
         if os.environ.get(k) != v: os.environ[k] = v
 
 
+def _trim_memory():
+    """After a script: what it freed goes back to the system now (a build is one long process; its memory is what iOS ends an app by)."""
+    import gc
+    try:
+        gc.collect()
+        ctypes.CDLL(None).malloc_zone_pressure_relief(None, 0)
+    except Exception: pass
+
+
 def _mark(line):
     """A position marker for the app's log only: never in the output a script reads"""
     global FAST_UNTIL
@@ -172,6 +181,7 @@ def _python(args, out, env, cwd):
             import traceback; out.write(traceback.format_exc()); code = 1
         finally:
             _mark(f'[py] leaving with code {code}')
+            _trim_memory()
             sys.argv, sys.path[:] = saved[0], saved[1]
             _set_environ(saved[2]); os.chdir(saved[3])
             _mark('[py] restored')
