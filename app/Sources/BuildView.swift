@@ -74,8 +74,6 @@ struct BuildView: View {
                 }
             }
                 }
-            }
-            .navigationTitle("NXnativeiOS")
         }
     }
 
