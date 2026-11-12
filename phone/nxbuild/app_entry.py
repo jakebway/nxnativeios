@@ -70,11 +70,27 @@ def open_split_zip(paths):
     return z
 
 
+DEFAULT_WEIGHTS = {'unpack': 150, 'check': 10}   # seconds, until the app has timed a build of its own
+GUESS = 90                                         # a stage nothing is known about
+
+
+def stage_key(name):
+    """'unpack v131072' -> 'unpack', 'shader split (3 of 7)' -> 'shader split': the stage without its numbers, to compare builds"""
+    return re.sub(r'\s+', ' ', re.sub(r'\(?\bv?\d[\w.]*\b\)?|\bof\b', ' ', name or '')).strip().lower()
+
+
 class Job:
     def __init__(self, d):
         self.dir = Path(d); self.cfg = json.loads((self.dir / 'job.json').read_text())
         self.logf = open(self.dir / 'log.txt', 'a', buffering=1, encoding='utf-8')
         self.status = {'state': 'running', 'stage': 'starting', 'progress': 0.0}
+        self.t0 = time.time()
+        self.times_file = Path(self.cfg['upstream']).parent / 'stage_times.json'   # how long each stage took in earlier builds
+        try: self.hist = json.loads(self.times_file.read_text())
+        except (OSError, ValueError): self.hist = dict(DEFAULT_WEIGHTS)
+        self.done_stages = {}       # key -> seconds, this build
+        self.stage_t0 = None; self.frac = 0.0
+        self._last_set = 0.0
 
     def log(self, line):
         self.logf.write(line.rstrip('\n') + '\n')
@@ -85,15 +101,75 @@ class Job:
         except ValueError: return
         try: self._event2(ev)
         except Exception: pass   # a progress event must never stop a build
+
+    def _weight(self, key):
+        return float(self.hist.get(key) or GUESS)
+
+    def _overall(self):
+        """Fraction of the whole build: stages are weighted by how long they took before (the first build guesses), the running stage by its own progress."""
+        st = self.status; n = st.get('n') or 1; key = st.get('key') or ''
+        done = sum(self.done_stages.values()) if False else sum(self._weight(k) for k in self.done_stages)
+        cur = self._weight(key) if key else 0.0
+        left = max(0, n - len(self.done_stages) - (1 if key else 0))
+        known = [self._weight(k) for k in self.hist if k] or [GUESS]
+        total = done + cur + left * (sum(known) / len(known))
+        return min(0.995, (done + cur * min(self.frac, 1.0)) / total) if total else 0.0
+
     def _event2(self, ev):
-        k, n = ev.get('k'), ev.get('n') or self.status.get('n')
-        if ev.get('ev') == 'stage': self.set(stage=ev.get('name') or self.status['stage'], k=k, n=n, progress=((k or 1) - 1) / n if n else 0.0)
-        elif ev.get('ev') == 'progress' and ev.get('total') and ev.get('done') is not None and self.status.get('n'):
-            self.set(progress=min(1.0, ((self.status.get('k') or 1) - 1 + ev['done'] / ev['total']) / self.status['n']))
+        kind = ev.get('ev'); k, n = ev.get('k'), ev.get('n') or self.status.get('n')
+        if kind == 'stage':
+            key = stage_key(ev.get('name')); self.frac = 0.0; self.stage_t0 = time.time()
+            self.status.update(stage=ev.get('name') or self.status['stage'], key=key, k=k, n=n, step='', detail='', eta=None)
+            self.set(progress=self._overall())
+        elif kind == 'step':
+            self.set(step=ev.get('step') or '')
+        elif kind == 'stage_end':
+            key = stage_key(ev.get('name')); self.done_stages[key] = float(ev.get('elapsed') or 0); self.frac = 1.0
+            self.status['key'] = ''
+            self.set(progress=self._overall())
+        elif kind == 'progress':
+            done, total = ev.get('done'), ev.get('total')
+            frac = ev.get('frac')
+            if frac is None and total and done is not None: frac = min(done / total, 0.99)
+            if frac is not None: self.frac = frac
+            unit = ev.get('unit') or ''
+            detail = (f'{done:,} / {total:,} {unit}' if total and done is not None else f'{done:,} {unit}' if done is not None else '').strip()
+            if unit == 'B' and done is not None: detail = f'{done / 1e9:.1f} / {total / 1e9:.1f} GB' if total else f'{done / 1e9:.1f} GB'
+            eta = ev.get('eta')
+            if time.time() - self._last_set >= 1.0:   # the app polls once a second
+                self._last_set = time.time()
+                self.set(progress=self._overall(), detail=detail, eta=eta, step=ev.get('step') or self.status.get('step', ''))
+
+    def finish_times(self):
+        """Remember how long each stage took, for the next build's progress bar."""
+        try:
+            h = dict(self.hist)
+            for k, v in self.done_stages.items():
+                if v > 0: h[k] = round(v, 1)
+            self.times_file.write_text(json.dumps(h))
+        except OSError: pass
 
     def set(self, **kw):
-        self.status.update(kw)
+        self.status.update(kw); self.status['elapsed'] = round(time.time() - self.t0)
         tmp = self.dir / 'status.json.tmp'; tmp.write_text(json.dumps(self.status)); os.replace(tmp, self.dir / 'status.json')
+
+
+def watch_memory(job):
+    """A line in the log when the phone's free memory for this app changes much: an app that is closed for memory leaves no error, only this."""
+    import ctypes, resource, threading
+    try:
+        f = ctypes.CDLL(None).os_proc_available_memory; f.restype = ctypes.c_size_t
+    except (OSError, AttributeError): return
+    def loop():
+        last = None; t = 0
+        while True:
+            try:
+                free = f() / 1e6; peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6
+                if last is None or abs(free - last) > 250 or time.time() - t > 120:
+                    job.log(f'[memory] {free:,.0f} MB free for this app, peak {peak:,.0f} MB'); last = free; t = time.time()
+            except Exception: pass
+            time.sleep(5)
+    threading.Thread(target=loop, daemon=True).start()
 
 
 def ensure_upstream(zip_path, dest, log):
@@ -180,6 +256,7 @@ def base_title(keys, game_dir, log):
 
 def run(job_dir):
     job = Job(job_dir)
+    watch_memory(job)
     so, se = sys.stdout, sys.stderr
     class W:   # the script's prints and progress events go to the log
         def write(self, s):
@@ -216,7 +293,8 @@ def run(job_dir):
         out = Path(c['ipas']); out.mkdir(parents=True, exist_ok=True)
         dst = out / ipas[-1].name; os.replace(ipas[-1], dst)
         if not o.get('keep_build'): shutil.rmtree(job.dir / 'build', ignore_errors=True); shutil.rmtree(job.dir / 'input', ignore_errors=True)
-        job.set(state='done', stage='done', progress=1.0, ipa=str(dst))
+        job.finish_times()
+        job.set(state='done', stage='done', progress=1.0, ipa=str(dst), detail='', eta=None)
         job.log(f'done: {dst.name}')
         return 0
     except BaseException as e:

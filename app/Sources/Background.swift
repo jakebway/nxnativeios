@@ -15,6 +15,18 @@ final class BackgroundKeeper {
     private var player: AVAudioEngine?
     private var audioNode: AVAudioPlayerNode?
     private var lastTitle = "Building your game"
+    private var grace: UIBackgroundTaskIdentifier = .invalid
+    private var observers: [NSObjectProtocol] = []
+    private var active = false
+
+    /// Where background events are written (next to the job's log), so a failure in the background can be diagnosed afterwards.
+    nonisolated(unsafe) static var notesPath: String?
+    nonisolated static func note(_ text: String) {
+        guard let p = notesPath else { return }
+        let line = "[bg \(Date().formatted(date: .omitted, time: .standard))] \(text)\n"
+        if let h = FileHandle(forWritingAtPath: p) { defer { try? h.close() }; _ = try? h.seekToEnd(); try? h.write(contentsOf: Data(line.utf8)) }
+        else { try? Data(line.utf8).write(to: URL(fileURLWithPath: p)) }
+    }
 
     /// Before the app finishes launching (App.init).
     nonisolated static func register() {
@@ -24,17 +36,43 @@ final class BackgroundKeeper {
         }
     }
 
-    func begin() {
+    func begin(notes: URL) {
+        Self.notesPath = notes.path; active = true
         let r = BGContinuedProcessingTaskRequest(identifier: Self.taskID, title: lastTitle, subtitle: "Starting")
         r.strategy = .queue
-        try? BGTaskScheduler.shared.submit(r)
+        do { try BGTaskScheduler.shared.submit(r); Self.note("background task requested") }
+        catch { Self.note("background task refused: \(error.localizedDescription)") }
         if UserDefaults.standard.object(forKey: "keepAlive") as? Bool ?? true { startAudio() }
+        // A few extra seconds of grace if the app is sent to the background while nothing else is keeping it alive.
+        grace = UIApplication.shared.beginBackgroundTask(withName: "build") { Self.note("the system ended the short grace period") }
+        let nc = NotificationCenter.default
+        observers = [
+            nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { Self.note("app went to the background; audio \(self?.player?.isRunning == true ? "running" : "NOT running"); task \(self?.task == nil ? "not granted" : "granted")") }
+            },
+            nc.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in Self.note("app is back in the foreground") },
+            nc.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { _ in Self.note("MEMORY WARNING from iOS") },
+            nc.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
+                let type = (n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+                MainActor.assumeIsolated { Self.note("audio interruption \(type == .began ? "began" : "ended")"); if type == .ended { self?.restartAudio() } }
+            },
+            nc.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { Self.note("audio engine reconfigured"); self?.restartAudio() }
+            },
+        ]
     }
 
     private func attach(_ t: BGContinuedProcessingTask) {
+        guard active else { t.setTaskCompleted(success: true); return }
         task = t
         t.progress.totalUnitCount = 1000
-        t.expirationHandler = { /* the build goes on; the silent audio keeps the app alive if the system gives the task up */ }
+        t.expirationHandler = Self.expiry()
+        Self.note("background task granted")
+    }
+
+    /// Built outside the main actor: iOS calls the handler on its own queue.
+    nonisolated private static func expiry() -> @Sendable () -> Void {
+        { BackgroundKeeper.note("the system ended the background task (the build goes on while audio runs)") }
     }
 
     func update(progress: Double, stage: String) {
@@ -44,22 +82,34 @@ final class BackgroundKeeper {
     }
 
     func end(success: Bool) {
+        active = false
         task?.setTaskCompleted(success: success); task = nil
+        observers.forEach(NotificationCenter.default.removeObserver); observers = []
         player?.stop(); audioNode?.stop(); player = nil; audioNode = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if grace != .invalid { UIApplication.shared.endBackgroundTask(grace); grace = .invalid }
+        Self.note("build finished")
+    }
+
+    private func restartAudio() {
+        guard active else { return }
+        player?.stop(); audioNode?.stop(); player = nil; audioNode = nil
+        if UserDefaults.standard.object(forKey: "keepAlive") as? Bool ?? true { startAudio() }
     }
 
     private func startAudio() {
         guard player == nil else { return }
         let s = AVAudioSession.sharedInstance()
-        try? s.setCategory(.playback, mode: .default, options: [.mixWithOthers]); try? s.setActive(true)
+        do { try s.setCategory(.playback, mode: .default, options: [.mixWithOthers]); try s.setActive(true) }
+        catch { Self.note("audio session failed: \(error.localizedDescription)"); return }
         let e = AVAudioEngine(), n = AVAudioPlayerNode()
         guard let fmt = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1),
               let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 44100) else { return }
         buf.frameLength = 44100   // a second of silence, looped
         e.attach(n); e.connect(n, to: e.mainMixerNode, format: fmt)
-        do { try e.start() } catch { return }
+        do { try e.start() } catch { Self.note("audio engine failed: \(error.localizedDescription)"); return }
         n.scheduleBuffer(buf, at: nil, options: .loops); n.play()
         player = e; audioNode = n
+        Self.note("silent audio started")
     }
 }

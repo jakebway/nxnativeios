@@ -7,6 +7,10 @@ struct JobStatus: Decodable {
     var progress: Double?
     var ipa: String?
     var error: String?
+    var step: String?
+    var detail: String?
+    var eta: Double?
+    var elapsed: Double?
 }
 
 @Observable @MainActor
@@ -27,6 +31,7 @@ final class BuildEngine {
 
     init() {
         Paths.ensure()
+        restoreLastJob()
         keyFiles = ((try? FileManager.default.contentsOfDirectory(at: Paths.keys, includingPropertiesForKeys: nil)) ?? [])
             .filter { !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
@@ -58,6 +63,24 @@ final class BuildEngine {
         return nil
     }
 
+    /// After the app was closed during a build (by the system, usually for memory), show what the build had logged and say so.
+    private func restoreLastJob() {
+        let fm = FileManager.default
+        guard let dirs = try? fm.contentsOfDirectory(at: Paths.jobs, includingPropertiesForKeys: nil).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }),
+              let last = dirs.last, let d = try? Data(contentsOf: last.appendingPathComponent("status.json")),
+              var st = try? JSONDecoder().decode(JobStatus.self, from: d) else { return }
+        jobDir = last
+        if st.state == "running" {
+            st = JobStatus(state: "failed", stage: st.stage, progress: st.progress, ipa: nil,
+                           error: "The app was closed during the last build (usually iOS ending it for memory). The log below shows where it stopped.")
+        }
+        status = st
+        if let t = try? String(contentsOf: last.appendingPathComponent("log.txt"), encoding: .utf8) {
+            logTail = t.split(separator: "\n").suffix(400).compactMap { Self.readable(String($0)) }
+        }
+        if let n = try? String(contentsOf: last.appendingPathComponent("bg.txt"), encoding: .utf8) { logTail += n.split(separator: "\n").map(String.init) }
+    }
+
     func forgetKeys() { for u in keyFiles { try? FileManager.default.removeItem(at: u) }; keyFiles = [] }
 
     func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); keyFiles.removeAll { $0 == u }; gameFiles.removeAll { $0 == u } }
@@ -74,7 +97,7 @@ final class BuildEngine {
         ]
         try? JSONSerialization.data(withJSONObject: cfg, options: .prettyPrinted).write(to: job.appendingPathComponent("job.json"))
         jobDir = job; running = true; status = JobStatus(state: "running", stage: "starting", progress: 0); logTail = []
-        BackgroundKeeper.shared.begin()
+        BackgroundKeeper.shared.begin(notes: job.appendingPathComponent("bg.txt"))
         UIApplication.shared.isIdleTimerDisabled = true   // iOS suspends a background app: keep the screen on while building
         let bundle = Paths.bundle.path, upstream = Paths.upstream.path, jobPath = job.path
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } }
@@ -92,19 +115,29 @@ final class BuildEngine {
     private func poll() {
         guard let job = jobDir else { return }
         if let d = try? Data(contentsOf: job.appendingPathComponent("status.json")), let s = try? JSONDecoder().decode(JobStatus.self, from: d) { status = s; BackgroundKeeper.shared.update(progress: s.progress ?? 0, stage: s.stage ?? "working") }
+        defer { if let n = try? String(contentsOf: job.appendingPathComponent("bg.txt"), encoding: .utf8) { logTail += n.split(separator: "\n").map(String.init) } }
         if let h = try? FileHandle(forReadingFrom: job.appendingPathComponent("log.txt")) {
             defer { try? h.close() }
             let size = (try? h.seekToEnd()) ?? 0
             try? h.seek(toOffset: size > 16000 ? size - 16000 : 0)
             if let d = try? h.readToEnd(), let s = String(data: d, encoding: .utf8) {
-                logTail = s.split(separator: "\n").suffix(60).map { line in
-                    // progress events are for the bar; show their message, not the JSON
-                    if line.hasPrefix("{\"ev\""), let j = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] {
-                        return (j["msg"] as? String) ?? [j["name"], j["step"]].compactMap { $0 as? String }.joined(separator: ": ")
-                    }
-                    return String(line)
-                }.filter { !$0.isEmpty }
+                logTail = s.split(separator: "\n").suffix(400).compactMap { Self.readable(String($0)) }
             }
+        }
+    }
+
+    /// A log line as a person reads it: progress events are for the bar, so they are left out here.
+    nonisolated static func readable(_ line: String) -> String? {
+        guard line.hasPrefix("{\"ev\""), let j = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return line.isEmpty ? nil : line }
+        let name = j["name"] as? String ?? ""
+        switch j["ev"] as? String {
+        case "say": return j["msg"] as? String
+        case "stage": return "▶ \(name)"
+        case "step": let st = j["step"] as? String ?? ""; return st.isEmpty ? nil : "    \(st)"
+        case "stage_end":
+            let ok = (j["ok"] as? Bool) ?? true, sum = j["summary"] as? String ?? "", el = j["elapsed"] as? Double ?? 0
+            return "\(ok ? "✓" : "✗") \(name)\(sum.isEmpty ? "" : ": \(sum)") (\(Int(el)) s)"
+        default: return nil
         }
     }
 

@@ -39,23 +39,40 @@ struct BuildView: View {
                 if let s = engine.status {
                     Section("Progress") {
                         if s.state == "running" {
-                            ProgressView(value: s.progress ?? 0) { Text(s.stage ?? "working") }
-                            Text("Keep the app open: the screen stays on until the build ends.").font(.caption).foregroundStyle(.secondary)
+                            ProgressView(value: s.progress ?? 0) {
+                                HStack { Text(s.stage ?? "working").lineLimit(1); Spacer(); Text("\(Int((s.progress ?? 0) * 100))%").monospacedDigit() }
+                            }
+                            if let d = s.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                            HStack {
+                                Text("Elapsed \(clock(s.elapsed))")
+                                Spacer()
+                                if let e = s.eta, e > 1 { Text("About \(clock(e)) left") }
+                            }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                            Text("It keeps building if you leave the app. If iOS closes it anyway, reopen it and share the log.").font(.caption2).foregroundStyle(.secondary)
                         } else if s.state == "done" {
                             Label("Done: \(URL(fileURLWithPath: s.ipa ?? "").lastPathComponent)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                             Text("Find it in the IPAs tab and share it to FlareStore.").font(.caption)
                         } else {
                             Label(s.error ?? "The build stopped", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                         }
+                        if !engine.logTail.isEmpty {
+                            ScrollViewReader { proxy in
+                                ScrollView {
+                                    LazyVStack(alignment: .leading, spacing: 1) {
+                                        ForEach(Array(engine.logTail.enumerated()), id: \.offset) { i, line in
+                                            Text(line).font(.system(size: 11, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading).id(i)
+                                        }
+                                    }.textSelection(.enabled)
+                                }
+                                .frame(height: 260)
+                                .onChange(of: engine.logTail.count) { _, n in if n > 0 { proxy.scrollTo(n - 1, anchor: .bottom) } }
+                                .onAppear { if !engine.logTail.isEmpty { proxy.scrollTo(engine.logTail.count - 1, anchor: .bottom) } }
+                            }
+                            if let l = engine.logURL { ShareLink(item: l) { Label("Share full log", systemImage: "square.and.arrow.up") } }
+                        }
                     }
                 }
-                if !engine.logTail.isEmpty {
-                    Section("Log") {
-                        ScrollView(.horizontal) {
-                            Text(engine.logTail.joined(separator: "\n")).font(.caption2.monospaced()).textSelection(.enabled)
-                        }
-                        if let l = engine.logURL { ShareLink(item: l) { Label("Share full log", systemImage: "square.and.arrow.up") } }
-                    }
+            }
                 }
             }
             .navigationTitle("NXnativeiOS")
@@ -123,4 +140,8 @@ enum DocPicker {
         }
         func documentPickerWasCancelled(_ c: UIDocumentPickerViewController) { Task { @MainActor in DocPicker.holder = nil } }
     }
+}
+
+func clock(_ t: Double?) -> String {
+    let n = Int(t ?? 0); return n >= 3600 ? String(format: "%d:%02d:%02d", n / 3600, n / 60 % 60, n % 60) : String(format: "%d:%02d", n / 60, n % 60)
 }
