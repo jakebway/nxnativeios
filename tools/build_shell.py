@@ -71,7 +71,7 @@ def main():
 
     config = run(sys.executable, ios / 'tools/gen_build.py', REPO / 'dm/host', gen, capture=True).stdout
     (gen / 'embed.S').write_text('// nxnativeios shell: game modules come from Frameworks/NXGame.framework\n')
-    flags = ''
+    flags = '-Wl,-headerpad,0x4000 -Wl,-headerpad_max_install_names'   # room in the Mach-O header for the load commands a signer adds ("Can't find free space of LoadCommand")
     (gen / 'dm.xcconfig').write_text(config + f'OTHER_LDFLAGS = $(inherited) $(DM_FRAMEWORKS) {flags}\n')
     run('xcodegen', 'generate')
 
