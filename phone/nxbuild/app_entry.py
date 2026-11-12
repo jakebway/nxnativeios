@@ -188,18 +188,18 @@ def _trace_exits(job):
         cb = ctypes.CFUNCTYPE(None)(lambda: stamp('C exit() called')); _KEEP.append(cb)
         ctypes.CDLL(None).atexit(cb)
     except Exception: pass
-    def loop():   # where the build is, once its position changes: a build that vanishes leaves its last position
-        last = None; n = 0
+    def loop():   # where the build is, with the time: on every change of position and at least every 10 s, for the whole build, so the last line dates the end
+        last, t = None, 0.0
         try: f = ctypes.CDLL(None).os_proc_available_memory; f.restype = ctypes.c_size_t
         except (OSError, AttributeError): f = None
-        while n < 600:
-            time.sleep(0.25)
+        while True:
+            time.sleep(0.5)
             try:
                 fr = sys._current_frames().get(me)
-                if fr is None: continue
-                st = traceback.extract_stack(fr)[-3:]
-                pos = ' < '.join(f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in reversed(st))
-                if pos != last: job.logf.write(f'[where] {pos}' + (f' | {f() / 1e6:,.0f} MB free' if f else '') + '\n'); job.logf.flush(); last = pos; n += 1
+                pos = 'build thread gone' if fr is None else ' < '.join(f'{Path(x.filename).name}:{x.lineno} {x.name}' for x in reversed(traceback.extract_stack(fr)[-3:]))
+                if pos != last or time.time() - t >= 10:
+                    job.logf.write(f'[where {time.strftime("%H:%M:%S")}] {pos}' + (f' | {f() / 1e6:,.0f} MB free' if f else '') + f' | {threading.active_count()} threads\n'); job.logf.flush()
+                    last, t = pos, time.time()
             except Exception: pass
     threading.Thread(target=loop, daemon=True).start()
 

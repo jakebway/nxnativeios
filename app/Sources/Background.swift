@@ -46,7 +46,10 @@ final class BackgroundKeeper {
         catch { Self.note("background task refused: \(error.localizedDescription)") }
         if UserDefaults.standard.object(forKey: "keepAlive") as? Bool ?? true { startAudio() }
         // A few extra seconds of grace if the app is sent to the background while nothing else is keeping it alive.
-        grace = UIApplication.shared.beginBackgroundTask(withName: "build") { Self.note("the system ended the short grace period") }
+        grace = UIApplication.shared.beginBackgroundTask(withName: "build") { [weak self] in
+            Self.note("the system ended the short grace period")
+            MainActor.assumeIsolated { if let g = self?.grace, g != .invalid { UIApplication.shared.endBackgroundTask(g); self?.grace = .invalid } }   // not ending it gets the app killed
+        }
         let nc = NotificationCenter.default
         observers = [
             nc.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in

@@ -228,9 +228,9 @@ class InProcess:
         out, bin_ = _Sink(), io.BytesIO()
         try: self.returncode = _dispatch(self.args, out, bin_, data, self._env, self._cwd)
         except Exception as e: out.write(f'[RED] nxnativeios: {self.args[0]}: {e!r}\n'); self.returncode = 1
-        _mark(f'[py] dispatch done {self.returncode}')
         payload = bin_.getvalue() + out.value().encode('utf-8', 'replace')
         self._deliver(payload, stdout, 'stdout')
+        if os.path.basename(str(self.args[0])).startswith('python'): _mark(f'[py] output handed back ({len(payload) // 1024:,} KB)')
         if stderr not in (None, STDOUT, DEVNULL, PIPE): pass   # everything went to stdout's payload; a separate stderr file gets nothing
         if stderr == PIPE: self.stderr = self._wrap(b''); self._errout = b''
 
