@@ -99,6 +99,8 @@ def lc_str(cmd, fixed, s):
 
 def write_dylib(secs, dst, platform='ios', install_name='@rpath/NXGame.framework/NXGame', minos='26.0', sdk='26.0'):
     # Group sections into segments, keeping first-seen order; __TEXT first (it holds the header), __DATA and the W segments next, __LINKEDIT last.
+    # zsign finds the room for LC_CODE_SIGNATURE only after a section named __text in __TEXT ("Can't find free space of LoadCommands"): an empty one, first
+    secs = [('__TEXT', '__text', Blob())] + [x for x in secs if x[1] != '__text']
     order = ['__TEXT']
     for seg, _, _ in secs:
         if seg not in order: order.append(seg)

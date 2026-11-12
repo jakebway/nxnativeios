@@ -8,7 +8,7 @@
 Inputs are .zip files and/or single files (no folder picker): keys are the file named prod.keys (else the one *.keys file), the game
 is every .nsp/.xci/.nsz/.xcz (base game, update, DLC), or one .nup file (needs no keys).
 """
-import threading, io, json, os, re, shutil, subprocess, sys, time, traceback, zipfile
+import threading, io, json, math, os, re, shutil, subprocess, sys, time, traceback, zipfile
 from pathlib import Path
 
 GAME_EXT = ('.nsp', '.xci', '.nsz', '.xcz', '.nup')   # .nup: a Switch 2 game in one NUP container (base, updates, DLC); it needs no keys
@@ -70,7 +70,7 @@ def open_split_zip(paths):
     return z
 
 
-DEFAULT_WEIGHTS = {'unpack': 150, 'check': 10}   # seconds, until the app has timed a build of its own
+DEFAULT_WEIGHTS = {'unpack': 91, 'check': 5, 'rewrite': 90, 'shader split': 303, 'ios shaders': 2700}   # seconds (a real 100 GB game on an iPhone), until the app has timed a build of its own
 GUESS = 90                                         # a stage nothing is known about
 
 
@@ -88,7 +88,9 @@ class Job:
         self.t0 = time.time()
         self.times_file = Path(self.cfg['upstream']).parent / 'stage_times.json'   # how long each stage took in earlier builds
         try: self.hist = json.loads(self.times_file.read_text())
-        except (OSError, ValueError): self.hist = dict(DEFAULT_WEIGHTS)
+        except (OSError, ValueError): self.hist = {}
+        self.hist = {**DEFAULT_WEIGHTS, **self.hist}
+        self.phase = None; self._maxp = 0.0
         self.done_stages = {}       # key -> seconds, this build
         self.stage_t0 = None; self.frac = 0.0
         self._last_set = 0.0
@@ -96,9 +98,17 @@ class Job:
 
     _QUIET = ('[', 'progress: ', 'frame step', 'function patch', 'shaders: ', 'main {', 'subsdk0 {', 'sdk {', '  File ', '    File ')
 
+    _TOLD = ('input:', 'keys:', 'game:', 'rar:', 'done:', 'unpacking nxnative', 'Traceback', 'RuntimeError', 'BuildError')
+
+    def _story(self, line):
+        """What the app's log shows: the build's own story. A whitelist: a stage can print tens of thousands of other lines (one per shader), which would push the story out of the app's view."""
+        if line.startswith('[RED]') or line.startswith(self._TOLD): return True
+        if line.startswith('{"ev"'): return any(f'"ev": "{k}"' in line for k in ('say', 'stage', 'step', 'stage_end'))
+        return False
+
     def log(self, line):
         self.logf.write(line.rstrip('\n') + '\n')
-        if line.startswith('[RED]') or (line.strip() and not line.startswith(self._QUIET) and '"ev": "progress"' not in line): self.story.write(line.rstrip('\n') + '\n')
+        if self._story(line): self.story.write(line.rstrip('\n') + '\n')
         if line.startswith('{"ev"'): self._event(line)
         elif line.startswith('progress: '):
             m = re.match(r'progress: (\d+)/(\d+)\s*$', line)
@@ -125,7 +135,13 @@ class Job:
         left = max(0, n - len(self.done_stages) - (1 if key else 0))
         known = [self._weight(k) for k in self.hist if k] or [GUESS]
         total = done + cur + left * (sum(known) / len(known))
-        return min(0.995, (done + cur * min(self.frac, 1.0)) / total) if total else 0.0
+        frac = min(self.frac, 1.0)
+        if key == 'ios shaders': frac = frac * 0.55   # the compile counter is the first 55 % of the stage; the checks after it have no counter
+        if self.phase:   # a step with no counter: creeps toward the end of its share of the stage, never reaching it
+            t0, base, span, tau = self.phase; frac = base + span * (1 - math.exp(-(time.time() - t0) / tau))
+        p = min(0.995, (done + cur * frac) / total) if total else 0.0
+        self._maxp = max(self._maxp, p)   # never backwards: the stage count grows as the script announces stages
+        return self._maxp
 
     def _event2(self, ev):
         kind = ev.get('ev'); k, n = ev.get('k'), ev.get('n') or self.status.get('n')
@@ -134,14 +150,17 @@ class Job:
         if kind == 'stage_end' and stage_key(ev.get('name')).startswith('ios shaders'):
             for d in (self.dir / 'build').glob('*/shader/pkg*'): self.free(d, 'the shader package')
         if kind == 'stage':
-            key = stage_key(ev.get('name')); self.frac = 0.0; self.stage_t0 = time.time(); self.stage_total = None
+            key = stage_key(ev.get('name')); self.phase = None; self.frac = 0.0; self.stage_t0 = time.time(); self.stage_total = None
             self.status.update(stage=ev.get('name') or self.status['stage'], key=key, k=k, n=n, step='', detail='', eta=None)
             self.set(progress=self._overall())
         elif kind == 'step':
-            self.set(step=ev.get('step') or '')
+            st = ev.get('step') or ''
+            if 'shader memory reads' in st: self.phase = (time.time(), 0.55, 0.15, 420.0)    # ~5 min on a phone
+            elif 'uniform reads' in st: self.phase = (time.time(), 0.70, 0.28, 1500.0)       # ~15-25 min
+            self.set(step=st, detail='', eta=None, progress=self._overall())
         elif kind == 'stage_end':
             key = stage_key(ev.get('name')); self.done_stages[key] = float(ev.get('elapsed') or 0); self.frac = 1.0
-            self.status['key'] = ''
+            self.status['key'] = ''; self.phase = None; self.finish_times()   # timed as it goes: a build that stops still teaches the next one
             self.set(progress=self._overall(), detail='', eta=None)
         elif kind == 'progress':
             done, total = ev.get('done'), ev.get('total')
