@@ -7,6 +7,10 @@ import os, sys, sysconfig, traceback
 def prepare(log=None):
     """Import capstone now (so the build script's later imports find it). Returns None, or the error text."""
     if 'capstone' in sys.modules: return None
+    # PythonBridge.m sets LIBCAPSTONE_PATH with setenv() after Python started, and os.environ is a copy taken at start: name the folder here
+    if not os.environ.get('LIBCAPSTONE_PATH'):
+        fws = os.environ.get('NXB_FRAMEWORKS') or os.path.join(os.path.dirname(sys.executable), 'Frameworks')
+        os.environ['LIBCAPSTONE_PATH'] = os.path.join(fws, 'capstone.framework')
     real_get_path = sysconfig.get_path
     def get_path(name, *a, **k):
         try: return real_get_path(name, *a, **k)
