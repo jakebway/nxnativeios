@@ -133,7 +133,7 @@ final class BuildEngine {
 
     /// A log line as a person reads it: progress events are for the bar, so they are left out here.
     nonisolated static func readable(_ line: String) -> String? {
-        if line.hasPrefix("progress: ") || line.contains("\"ev\": \"progress\"") { return nil }
+        if line.hasPrefix("progress: ") || line.hasPrefix("[where]") || line.contains("\"ev\": \"progress\"") { return nil }
         guard line.hasPrefix("{\"ev\""), let j = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return line.isEmpty ? nil : line }
         let name = j["name"] as? String ?? ""
         switch j["ev"] as? String {

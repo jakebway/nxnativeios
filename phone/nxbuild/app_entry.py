@@ -170,6 +170,38 @@ class Job:
             except OSError: pass
 
 
+_KEEP = []
+
+def _trace_exits(job):
+    """A build that ends without any error was ended by something calling exit, or by the system. Log who calls exit, and where the build is, so the last lines say."""
+    import ctypes, traceback
+    me = threading.get_ident()
+    def stamp(tag):
+        try:
+            for tid, fr in sys._current_frames().items():
+                job.logf.write(f'[where] {tag}: thread {tid}\n' + ''.join(traceback.format_stack(fr)[-5:])); job.logf.flush()
+        except Exception: pass
+    real_exit = os._exit
+    def _exit(code=0): stamp(f'os._exit({code})'); real_exit(code)
+    os._exit = _exit
+    try:
+        cb = ctypes.CFUNCTYPE(None)(lambda: stamp('C exit() called')); _KEEP.append(cb)
+        ctypes.CDLL(None).atexit(cb)
+    except Exception: pass
+    def loop():   # where the build is, once its position changes: a build that vanishes leaves its last position
+        last = None; n = 0
+        while n < 600:
+            time.sleep(1)
+            try:
+                fr = sys._current_frames().get(me)
+                if fr is None: continue
+                st = traceback.extract_stack(fr)[-3:]
+                pos = ' < '.join(f'{Path(f.filename).name}:{f.lineno} {f.name}' for f in reversed(st))
+                if pos != last: job.logf.write(f'[where] {pos}\n'); job.logf.flush(); last = pos; n += 1
+            except Exception: pass
+    threading.Thread(target=loop, daemon=True).start()
+
+
 def watch_memory(job):
     """A line in the log when the phone's free memory for this app changes much: an app that is closed for memory leaves no error, only this."""
     import ctypes, resource, threading
@@ -284,6 +316,7 @@ def run(job_dir):
         faulthandler.enable(file=job.logf, all_threads=True)
         os.dup2(job.logf.fileno(), 2); os.dup2(job.logf.fileno(), 1)
         job.log('[crash log on]')
+        _trace_exits(job)
     except Exception as e: job.log(f'[crash log off: {e}]')
     so, se = sys.stdout, sys.stderr
     class W:   # the script's prints and progress events go to the log
