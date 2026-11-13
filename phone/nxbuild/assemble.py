@@ -149,9 +149,11 @@ def assemble(out_ipa, log=None):
     # shaders
     msldir = {'vulkan': 'vk', 'gl': 'gl'}.get(gfx, 'b-' + chain_version(repo))
     src = msl_ios / msldir
-    if src.is_dir(): _copy(src, app / 'msl' / msldir)
-    elif Path(str(src) + '.img').is_file(): _copy(Path(str(src) + '.img'), app / 'msl' / (msldir + '.img'))
-    else: raise AssembleError(f'no shader libraries at {src}')
+    if not src.is_dir() and not Path(str(src) + '.img').is_file(): raise AssembleError(f'no shader libraries at {src}')
+    if e.get('DM_COPY_ROMFS', 'YES') == 'NO':   # slim IPA: the shader libraries travel with the game files (Documents/msl, patch 0004); the app is only code and tables
+        _say(log, 'shader libraries: left out of the IPA; copy the msl folder into the game\'s folder in Files')
+    elif src.is_dir(): _copy(src, app / 'msl' / msldir)
+    else: _copy(Path(str(src) + '.img'), app / 'msl' / (msldir + '.img'))
     # DLC
     if e.get('AOC') and Path(e['AOC']).is_dir(): _copy(e['AOC'], app / 'aoc')
     if e.get('DM_ENV_FILE') and Path(e['DM_ENV_FILE']).is_file(): shutil.copyfile(e['DM_ENV_FILE'], app / 'dm/env.txt')

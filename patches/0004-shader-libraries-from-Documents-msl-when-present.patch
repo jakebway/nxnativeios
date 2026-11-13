@@ -1,0 +1,13 @@
+diff --git a/dm/ios/Sources/main.m b/dm/ios/Sources/main.m
+index 73b5d44d..eda3e0d3 100644
+--- a/dm/ios/Sources/main.m
++++ b/dm/ios/Sources/main.m
+@@ -238,6 +238,8 @@ static NSString *program_env(void) {
+     fprintf(stderr, "boot: game files %s\n", romfs.fileSystemRepresentation);
+     setenv("DM_ROMFS", romfs.fileSystemRepresentation, 0);
+     setenv("DM_NVN_SHMAP", [dmdir stringByAppendingPathComponent:@"shader_map.tsv"].fileSystemRepresentation, 0);
++    NSString *dmsl = [doc stringByAppendingPathComponent:@"msl"];   // a slim IPA (nxnativeios): the shader libraries come with the game files in Documents/msl
++    if (!prog && [[fm contentsOfDirectoryAtPath:dmsl error:nil] count]) { msl = dmsl; fprintf(stderr, "boot: shader libraries in Documents/msl\n"); }
+     setenv("DM_MSL_DIR", msl.fileSystemRepresentation, 0);
+     return dmdir;
+ }

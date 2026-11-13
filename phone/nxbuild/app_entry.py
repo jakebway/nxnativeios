@@ -407,6 +407,12 @@ def run(job_dir):
                 fdir = out / f'{dst.stem} game files'; fdir.mkdir(parents=True, exist_ok=True)
                 os.replace(imgs[-1], fdir / 'romfs.img'); job.log(f'game files: {fdir.name}/romfs.img ({(fdir / "romfs.img").stat().st_size / 1e9:.1f} GB)')
             else: job.log('[RED] the game files image was not found: the app will not find its game files')
+            libs = [q for d in (job.dir / 'build').rglob('dmsh_b') if d.is_dir() for q in d.iterdir() if q.name.startswith('b-')]   # the iOS shader libraries (b-<chain> or b-<chain>.img)
+            if libs:
+                mdir = out / f'{dst.stem} game files' / 'msl'; mdir.mkdir(parents=True, exist_ok=True)
+                for q in libs: shutil.rmtree(mdir / q.name, ignore_errors=True) if (mdir / q.name).is_dir() else (mdir / q.name).unlink(missing_ok=True); os.replace(q, mdir / q.name)
+                job.log(f'game files: {dst.stem} game files/msl (shader libraries)')
+            else: job.log('[RED] the shader libraries were not found: the app will have no shaders')
         if not o.get('keep_build'): shutil.rmtree(job.dir / 'build', ignore_errors=True); shutil.rmtree(job.dir / 'input', ignore_errors=True)
         job.finish_times()
         job.set(state='done', stage='done', progress=1.0, ipa=str(dst), detail='', eta=None)
