@@ -84,13 +84,18 @@ enum Keychain {
 struct SigningSection: View {
     @State private var store = SigningStore.shared
     @State private var password = ""
-    @State private var picking: SigningStore.Kind?
+    /// The same UIKit picker as Add keys / Add game (SwiftUI's fileImporter does nothing useful here)
+    private func pick(_ k: SigningStore.Kind) {
+        if k == .p12 { store.setPassword(password) }
+        DocPicker.present { urls in if let u = urls.first { store.importFile(u, kind: k) } }
+    }
+
     var body: some View {
         Section {
-            Button { picking = .p12 } label: { Label(store.info.cert.map { "Certificate: \($0)" } ?? "Add certificate (.p12)", systemImage: store.info.cert == nil ? "plus.circle" : "checkmark.seal.fill") }
+            Button { pick(.p12) } label: { Label(store.info.cert.map { "Certificate: \($0)" } ?? "Add certificate (.p12)", systemImage: store.info.cert == nil ? "plus.circle" : "checkmark.seal.fill") }
             SecureField("Certificate password", text: $password).textContentType(.password).submitLabel(.done)
                 .onSubmit { store.setPassword(password) }
-            Button { picking = .profile } label: { Label(store.info.profileName.map { "Profile: \($0)" } ?? "Add provisioning profile (.mobileprovision)", systemImage: store.info.profileName == nil ? "plus.circle" : "checkmark.seal.fill") }
+            Button { pick(.profile) } label: { Label(store.info.profileName.map { "Profile: \($0)" } ?? "Add provisioning profile (.mobileprovision)", systemImage: store.info.profileName == nil ? "plus.circle" : "checkmark.seal.fill") }
             if let e = store.info.expires { LabeledContent("Profile expires", value: e.formatted(date: .abbreviated, time: .omitted)) }
             if let d = store.info.devices { LabeledContent("Devices in the profile", value: "\(d)") }
             if let w = store.info.warning { Label(w, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.footnote) }
@@ -98,11 +103,6 @@ struct SigningSection: View {
             if store.info.cert != nil || store.info.profileName != nil { Button("Forget certificate and profile", role: .destructive) { store.forget(); password = "" } }
         } header: { Text("Signing") } footer: {
             Text("Your own .p12, its password and a .mobileprovision that lists this phone. They stay on this phone; the password is kept in the Keychain.")
-        }
-        .fileImporter(isPresented: Binding(get: { picking != nil }, set: { if !$0 { picking = nil } }),
-                      allowedContentTypes: picking == .p12 ? [UTType(filenameExtension: "p12") ?? .data, .pkcs12] : [UTType(filenameExtension: "mobileprovision") ?? .data, .data]) { r in
-            if case .success(let u) = r, let k = picking { if k == .p12 { store.setPassword(password) }; store.importFile(u, kind: k) }
-            picking = nil
         }
         .onAppear { password = store.password }
     }
