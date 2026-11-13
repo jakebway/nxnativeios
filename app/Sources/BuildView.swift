@@ -75,6 +75,7 @@ struct BuildView: View {
                     }
                     HStack(spacing: 24) {
                         Button("See it in IPAs") { engine.tab = 1 }
+                        Button("Open in Files") { openInFiles(Paths.ipas) }
                         Button("Dismiss", role: .cancel) { engine.status = nil }.foregroundStyle(.secondary)
                     }.font(.subheadline).buttonStyle(.borderless)
                 }.frame(maxWidth: .infinity).padding(.vertical, 8)

@@ -48,6 +48,7 @@ struct IPAsView: View {
                 }
             }
             .navigationTitle("IPAs")
+            .toolbar { Button { openInFiles(Paths.ipas) } label: { Label("Open in Files", systemImage: "folder") } }
             .refreshable { load() }
             .onAppear(perform: load)
             .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
@@ -74,4 +75,10 @@ struct IPAsView: View {
         if !clean.isEmpty { try? FileManager.default.moveItem(at: f.url, to: f.url.deletingLastPathComponent().appendingPathComponent(clean + ".ipa")) }
         renaming = nil; load()
     }
+}
+
+/// The Files app, opened on a folder of this app's Documents (the folder is created first: Files only lists what exists).
+@MainActor func openInFiles(_ dir: URL) {
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    if let u = URL(string: "shareddocuments://" + dir.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) { UIApplication.shared.open(u) }
 }
