@@ -389,6 +389,7 @@ def run(job_dir):
         o = c.get('options', {})
         extra = []
         if o.get('language'): extra += ['--language', o['language']]
+        if o.get('fallback_icon') and os.path.isfile(o['fallback_icon']): extra += ['--fallback-icon', o['fallback_icon']]
         if 'show_fps' in o: extra += ['--show-fps' if o['show_fps'] else '--no-show-fps']
         if o.get('small_ipa', False): extra += ['--romfs', 'separate', '--keep-extracted']   # the game files stay out of the IPA (a 36 GB IPA cannot be signed or installed): the app takes romfs.img from its Files folder
         sg = o.get('sign') or {}

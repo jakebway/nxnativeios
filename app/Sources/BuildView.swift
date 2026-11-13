@@ -24,6 +24,12 @@ struct BuildView: View {
             Text("Pick the .nsp, .xci or .nup, or a .zip / .rar of it. Split archives (.zip.001, .z01, .part1.rar, .r00 ...): pick all the parts at once. Add the update and DLC here too. Nothing leaves this phone.")
         }
         Section {
+            Button { DocPicker.present { if let u = $0.first { engine.setIcon(u) } } } label: { Label(engine.hasIcon ? "Icon chosen: change it" : "Choose an icon", systemImage: "photo") }
+            if engine.hasIcon { Button("Remove the icon", role: .destructive) { engine.clearIcon() } }
+        } header: { Text("Icon") } footer: {
+            Text("Used only when the game has no icon of its own (Switch 2 games carry none): any picture, JPEG or PNG. Games that have an icon keep theirs.")
+        }
+        Section {
             Button { engine.start() } label: { Label("Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity) }
                 .buttonStyle(.borderedProminent).controlSize(.large).disabled(!ready)
         } footer: {

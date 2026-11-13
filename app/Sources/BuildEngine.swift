@@ -81,6 +81,16 @@ final class BuildEngine {
         }
     }
 
+    /// The icon for a game that carries none (a Switch 2 .nup has no icon): kept between builds, handed to the build as its fallback icon.
+    var iconURL: URL { Paths.support.appendingPathComponent("fallback-icon") }
+    var hasIcon = FileManager.default.fileExists(atPath: Paths.support.appendingPathComponent("fallback-icon").path)
+    func setIcon(_ u: URL) {
+        let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }
+        try? FileManager.default.removeItem(at: iconURL)
+        do { try FileManager.default.copyItem(at: u, to: iconURL); hasIcon = true } catch { logTail.append("could not read that icon: \(error.localizedDescription)") }
+    }
+    func clearIcon() { try? FileManager.default.removeItem(at: iconURL); hasIcon = false }
+
     func forgetKeys() { for u in keyFiles { try? FileManager.default.removeItem(at: u) }; keyFiles = [] }
 
     func remove(_ u: URL) { try? FileManager.default.removeItem(at: u); keyFiles.removeAll { $0 == u }; gameFiles.removeAll { $0 == u } }
@@ -99,6 +109,7 @@ final class BuildEngine {
             options["sign"] = ["p12": store.p12URL.path, "profile": store.profileURL.path]
             setenv("NXB_SIGN_PW", store.password, 1)   // in this process only; the Python build reads it from here, never from a file
         }
+        if hasIcon { options["fallback_icon"] = iconURL.path }
         if !language.isEmpty { options["language"] = language }
         let cfg: [String: Any] = [
             "inputs": picked.map(\.path), "ipas": Paths.ipas.path, "shells": Paths.resources.appendingPathComponent("shells").path,
