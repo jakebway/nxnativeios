@@ -16,6 +16,7 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: ZSign   # zsign (MIT): the on-device signer, with the OpenSSL CI builds into Frameworks/openssl
       - path: Assets.xcassets
       - path: NXData
         type: folder
@@ -41,7 +42,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.nxnativeios.builder
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Bridging.h
-        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers"
+        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/Frameworks/Python.xcframework/ios-arm64/Python.framework/Headers $(PROJECT_DIR)/ZSign $(PROJECT_DIR)/ZSign/common $(PROJECT_DIR)/Frameworks/openssl/include"
+        LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/Frameworks/openssl/lib"
+        OTHER_LDFLAGS: "-lssl -lcrypto -lz -lc++"
+        CLANG_CXX_LANGUAGE_STANDARD: "gnu++17"
+        GCC_WARN_INHIBIT_ALL_WARNINGS: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         MARKETING_VERSION: "0.1"
         CURRENT_PROJECT_VERSION: "1"

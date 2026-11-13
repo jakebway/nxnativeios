@@ -166,9 +166,31 @@ def assemble(out_ipa, log=None):
     ip.write_bytes(plistlib.dumps(info))
     sizes = sorted(((sum(f.stat().st_size for f in q.rglob('*') if f.is_file()) if q.is_dir() else q.stat().st_size, q.name) for q in app.iterdir()), reverse=True)
     _say(log, 'IPA contents: ' + ', '.join(f'{n} {b / 1e9:.1f} GB' for b, n in sizes[:5] if b > 5e7))
+    sign_stage(work, log)
     pack(stage, out_ipa, log)
     shutil.rmtree(stage, ignore_errors=True)
     return out_ipa
+
+
+def sign_stage(work, log):
+    """The user's own .p12 and profile (Settings → Signing) sign the app in place, before it is zipped: no second copy of the game, and the IPA comes out ready to install.
+    The signer is zsign, built into the app (nxb_sign_app, ZSign/nxb_sign.cpp)"""
+    p12, prov = os.environ.get('NXB_SIGN_P12'), os.environ.get('NXB_SIGN_PROFILE')
+    if not (p12 and prov and os.path.isfile(p12) and os.path.isfile(prov)): return False
+    import ctypes, plistlib
+    raw = Path(prov).read_bytes(); a, b = raw.find(b'<?xml'), raw.rfind(b'</plist>')
+    appid = (plistlib.loads(raw[a:b + 8]).get('Entitlements') or {}).get('application-identifier', '') if a >= 0 and b > a else ''
+    bid = appid.partition('.')[2]
+    bid = '' if bid in ('', '*') or bid.endswith('*') else bid   # an explicit app ID in the profile is the bundle ID the app must have; a wildcard keeps the game's own
+    try: fn = ctypes.CDLL(None).nxb_sign_app
+    except AttributeError: raise AssembleError('this build of the app has no signer: update the app')
+    fn.argtypes = [ctypes.c_char_p] * 5 + [ctypes.c_char_p, ctypes.c_int]
+    err = ctypes.create_string_buffer(500)
+    _say(log, f'signing with your certificate{" as " + bid if bid else ""} ...')
+    rc = fn(str(work).encode(), p12.encode(), os.environ.get('NXB_SIGN_PW', '').encode(), prov.encode(), bid.encode(), err, 500)
+    if rc: raise AssembleError(f'signing failed: {err.value.decode() or rc}')
+    _say(log, 'signed: the IPA is ready to install')
+    return True
 
 
 def pack(stage, out_ipa, log=None):

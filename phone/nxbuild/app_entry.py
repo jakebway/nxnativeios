@@ -391,6 +391,10 @@ def run(job_dir):
         if o.get('language'): extra += ['--language', o['language']]
         if 'show_fps' in o: extra += ['--show-fps' if o['show_fps'] else '--no-show-fps']
         if o.get('small_ipa', False): extra += ['--romfs', 'separate', '--keep-extracted']   # the game files stay out of the IPA (a 36 GB IPA cannot be signed or installed): the app takes romfs.img from its Files folder
+        sg = o.get('sign') or {}
+        for k, v in (('NXB_SIGN_P12', sg.get('p12')), ('NXB_SIGN_PROFILE', sg.get('profile'))):
+            if v: os.environ[k] = v
+            else: os.environ.pop(k, None)
         os.environ['NXB_FAST'] = '1' if o.get('fast_build', True) else '0'
         job.set(stage='building')
         rc = driver.build(game_dir, keys, None, job.dir, log=job.log, extra=extra)

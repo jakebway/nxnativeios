@@ -84,6 +84,7 @@ enum Keychain {
 struct SigningSection: View {
     @State private var store = SigningStore.shared
     @State private var password = ""
+    @AppStorage("signLocally") private var signLocally = true
     /// The same UIKit picker as Add keys / Add game (SwiftUI's fileImporter does nothing useful here)
     private func pick(_ k: SigningStore.Kind) {
         if k == .p12 { store.setPassword(password) }
@@ -96,6 +97,7 @@ struct SigningSection: View {
             SecureField("Certificate password", text: $password).textContentType(.password).submitLabel(.done)
                 .onSubmit { store.setPassword(password) }
             Button { pick(.profile) } label: { Label(store.info.profileName.map { "Profile: \($0)" } ?? "Add provisioning profile (.mobileprovision)", systemImage: store.info.profileName == nil ? "plus.circle" : "checkmark.seal.fill") }
+            if store.ready { Toggle("Sign built games with this certificate", isOn: $signLocally) }
             if let e = store.info.expires { LabeledContent("Profile expires", value: e.formatted(date: .abbreviated, time: .omitted)) }
             if let d = store.info.devices { LabeledContent("Devices in the profile", value: "\(d)") }
             if let w = store.info.warning { Label(w, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.footnote) }
