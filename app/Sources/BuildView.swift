@@ -65,6 +65,10 @@ struct BuildView: View {
                     Text("Your IPA is ready").font(.title3.weight(.semibold))
                     Text([url.deletingPathExtension().lastPathComponent, bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }].compactMap { $0 }.joined(separator: " · "))
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    if FileManager.default.fileExists(atPath: url.deletingPathExtension().path + " game files/romfs.img") {
+                        Text("After installing, open Files → On My iPhone → NXnativeiOS → IPAs → “\(url.deletingPathExtension().lastPathComponent) game files”, copy romfs.img, and paste it into the game's own folder (On My iPhone → the game).")
+                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }
                     if FileManager.default.fileExists(atPath: url.path) {
                         ShareLink(item: url) { Label("Share to FlareStore", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
                             .buttonStyle(.borderedProminent).controlSize(.large)

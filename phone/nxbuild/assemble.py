@@ -136,6 +136,11 @@ def assemble(out_ipa, log=None):
     # tables
     tables(repo, game, patched, gfx, app / 'dm', e.get('CONTROL') or romfs.parent / 'control.nacp', log)
     # the game files (stage_resources.sh sync_romfs / beside_romfs)
+    if e.get('DM_COPY_ROMFS', 'YES') == 'NO':   # the game files stay out: the identity of the image goes in, so the app only takes the image this build was made for
+        if romfs.is_file():
+            sys.path.insert(0, str(repo / 'dm/tools')); import romfs_image
+            (app / 'romfs.id').write_text(romfs_image.identity(str(romfs), game, e.get('DM_APP_VERSION') or '1.0', e.get('PKG', '')) + '\n')
+        _say(log, 'game files: left out of the IPA; copy romfs.img into the game\'s folder in Files')
     if e.get('DM_COPY_ROMFS', 'YES') != 'NO':
         _copy(romfs, app / ('romfs.img' if romfs.is_file() else 'romfs'))
         _say(log, f'game files: {romfs.name}')
@@ -159,6 +164,8 @@ def assemble(out_ipa, log=None):
     names = icon_pngs(e.get('DM_ICON'), app, log)
     if names: info['CFBundleIcons'] = {'CFBundlePrimaryIcon': {'CFBundleIconFiles': names, 'CFBundleIconName': names[0]}}
     ip.write_bytes(plistlib.dumps(info))
+    sizes = sorted(((sum(f.stat().st_size for f in q.rglob('*') if f.is_file()) if q.is_dir() else q.stat().st_size, q.name) for q in app.iterdir()), reverse=True)
+    _say(log, 'IPA contents: ' + ', '.join(f'{n} {b / 1e9:.1f} GB' for b, n in sizes[:5] if b > 5e7))
     pack(stage, out_ipa, log)
     shutil.rmtree(stage, ignore_errors=True)
     return out_ipa
