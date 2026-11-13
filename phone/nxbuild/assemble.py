@@ -157,9 +157,19 @@ def assemble(out_ipa, log=None):
     if e.get('DM_ENV_FILE') and Path(e['DM_ENV_FILE']).is_file(): shutil.copyfile(e['DM_ENV_FILE'], app / 'dm/env.txt')
     # Info.plist, as project.yml / build_ipa.sh set it
     ip = app / 'Info.plist'; info = plistlib.loads(ip.read_bytes())
+    # the packed language is the launcher's default for the Game language row (build_ipa.sh: "the game has no <lang>; packing <first>"), so the screen and the Info.plist agree
+    lang = e.get('DM_LANG') or 'en-US'
+    try:
+        import json
+        lj = json.loads((app / 'dm/launcher.json').read_text())
+        ld = next((x.get('default') for x in lj.get('settings', []) if x.get('env') == 'DM_LANG'), '')
+        if ld and ld != lang: _say(log, f'game language: the game has no {lang}; packing {ld}, its first'); lang = ld
+    except (OSError, ValueError): pass
+    cat = _game_py(repo, game, 'app_category') if not e.get('DM_APP_CATEGORY') else e['DM_APP_CATEGORY']
+    if cat: info['LSApplicationCategoryType'] = cat
     info.update(CFBundleIdentifier=e['DM_BUNDLE_ID'], CFBundleDisplayName=e.get('DM_DISPLAY_NAME') or game, CFBundleName=(e.get('DM_DISPLAY_NAME') or game)[:15],
                 CFBundleShortVersionString=e.get('DM_APP_VERSION') or '1.0', CFBundleVersion=e.get('DM_APP_VERSION') or '1.0',
-                DMShowFPS=e.get('DM_SHOW_FPS', '1') in ('1', 'YES'), DMLanguage=e.get('DM_LANG') or 'en-US')
+                DMShowFPS=e.get('DM_SHOW_FPS', '1') in ('1', 'YES'), DMLanguage=lang)
     if gfx not in ('vulkan', 'gl'): info['DMChain'] = msldir[2:]
     names = icon_pngs(e.get('DM_ICON'), app, log)
     if names: info['CFBundleIcons'] = {'CFBundlePrimaryIcon': {'CFBundleIconFiles': names, 'CFBundleIconName': names[0]}}

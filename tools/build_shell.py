@@ -47,6 +47,14 @@ def main():
     assets.mkdir()
     (assets / 'Contents.json').write_text(json.dumps({'info': {'author': 'xcode', 'version': 1}}))
 
+    # The shared-font stand-ins the host loads from dm/font (build_ipa.sh): macOS's Arial Unicode (iOS has none) and the Nintendo button font make_ext_font.py generates. Without them the
+    # game has no text ("[RED] cannot open the standard shared font"). They are the same for every game, so the shell carries them.
+    font = tables / 'font'; font.mkdir()
+    arial = Path(os.environ.get('STD_FONT') or '/System/Library/Fonts/Supplemental/Arial Unicode.ttf')
+    if not arial.is_file(): raise RuntimeError(f'no standard font {arial} (STD_FONT=a TTF)')
+    shutil.copyfile(arial, font / 'standard.ttf')
+    subprocess.run([sys.executable, str(REPO / 'dm/tools/make_ext_font.py'), str(font / 'nintendo_ext.ttf')], check=True, stdout=subprocess.DEVNULL)
+
     # One original text page, two writable pages (including the key page),
     # and one patch page exercise the production Mach-O segment/link flags.
     patched = root / 'patched'
@@ -105,6 +113,8 @@ def main():
                            (shaders / marker, app / 'msl' / f'b-{chain}' / marker)):
         if source.read_bytes() != packed.read_bytes():
             raise RuntimeError(f'Resource staging failed: {packed}')
+    for f in ('standard.ttf', 'nintendo_ext.ttf'):
+        if not (app / 'dm/font' / f).is_file(): raise RuntimeError(f'the shell has no dm/font/{f}')
     if (app / '_CodeSignature').exists() or (app / 'embedded.mobileprovision').exists():
         raise RuntimeError('The shell must be unsigned')
     # The Mac route signs the executable ad-hoc with the Increased Memory Limit entitlement (dm/ios/tools/build_ipa.sh, DM_ENTITLEMENTS): an unsigned binary has no signature for a sideloader to read

@@ -23,8 +23,8 @@ jobs:
       - id: g
         run: |
           list="${{ inputs.games }}"
-          # default: Super Mario Bros. Wonder (NVN), Hades (Vulkan), Digimon Story Cyber Sleuth (OpenGL), as nxnative's own CI
-          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000"
+          # default: Super Mario Bros. Wonder (NVN), Hades (Vulkan), Digimon Story Cyber Sleuth (OpenGL), as nxnative's own CI, and Ocarina of Time (Switch 2)
+          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000 0400486024DEC000"
           echo "games=$(printf '%s\n' $list | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
           echo "commit=$(cat ci/nxnative.commit)" >> "$GITHUB_OUTPUT"
 
@@ -45,6 +45,8 @@ jobs:
           git -C upstream checkout ${{ needs.list.outputs.commit }}
           git -C upstream apply "$PWD"/patches/*.patch
       - run: command -v xcodegen || brew install xcodegen
+      - name: fontTools (make_ext_font.py makes the Nintendo button font)
+        run: python3 -c 'import fontTools' 2>/dev/null || python3 -m pip install fonttools || python3 -m pip install --break-system-packages fonttools
       - name: Build the shell
         env:
           GAME: ${{ matrix.game }}
