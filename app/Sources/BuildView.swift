@@ -130,9 +130,9 @@ struct BuildView: View {
         .swipeActions { if !engine.running { Button("Remove", role: .destructive) { engine.remove(u) } } }
     }
 
-    /// keys and a game, or a .nup alone (Switch 2 games carry no encryption)
+    /// keys and a game, a .nup alone (Switch 2 games carry no encryption), or an archive (what is inside it is only known once it is opened)
     private var ready: Bool {
-        !engine.gameFiles.isEmpty && (!engine.keyFiles.isEmpty || engine.gameFiles.contains { ext($0) == "nup" })
+        !engine.gameFiles.isEmpty && (!engine.keyFiles.isEmpty || engine.gameFiles.contains { ext($0) == "nup" || ext($0) == "rar" || ext($0) == "zip" || isPart($0) })   // an archive may hold a .nup (or the keys): the build looks inside
     }
 
     private func ext(_ u: URL) -> String { u.pathExtension.lowercased() }
