@@ -177,6 +177,11 @@ def pack(stage, out_ipa, log=None):
     files = sorted(p for p in stage.rglob('*') if p.is_file() or p.is_symlink())
     total = sum(p.stat().st_size for p in files if p.is_file()); done = 0; last = -1
     with zipfile.ZipFile(tmp, 'w', allowZip64=True) as z:
+        # folder entries first, as the Mac route's zip has them (Payload/, Payload/X.app/, ...)
+        for d in sorted({stage} | {d for d in stage.rglob('*') if d.is_dir() and not d.is_symlink()}):
+            di = zipfile.ZipInfo(d.relative_to(stage.parent).as_posix() + '/', (1980, 1, 1, 0, 0, 0))
+            di.create_system = 3; di.external_attr = (0o40755 << 16) | 0x10
+            z.writestr(di, b'')
         for p in files:
             arc = p.relative_to(stage.parent).as_posix()
             if p.is_symlink():
