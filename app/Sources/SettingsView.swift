@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(BuildEngine.self) private var engine
     @AppStorage("showFPS") private var showFPS = true
-    @AppStorage("smallIPA") private var smallIPA = false
+    @AppStorage("smallIPA") private var smallIPA = true
     @AppStorage("fastBuild") private var fastBuild = true
     @AppStorage("language") private var language = ""
     @AppStorage("keepAlive") private var keepAlive = true
@@ -27,7 +27,7 @@ struct SettingsView: View {
                 }
                 Section("Games you build") {
                     Toggle("Show frame rate", isOn: $showFPS)
-                    Toggle("Small IPA (game files stay in Files)", isOn: $smallIPA)
+                    Toggle("Small IPA (game files and shaders stay in Files)", isOn: $smallIPA)
                     Toggle("Fast build (skip an optional speed table)", isOn: $fastBuild)
                     Picker("Game language", selection: $language) {
                         ForEach(languages.keys.sorted { (languages[$0] ?? "") < (languages[$1] ?? "") }, id: \.self) { Text(languages[$0] ?? $0).tag($0) }
