@@ -107,6 +107,15 @@ def main():
             raise RuntimeError(f'Resource staging failed: {packed}')
     if (app / '_CodeSignature').exists() or (app / 'embedded.mobileprovision').exists():
         raise RuntimeError('The shell must be unsigned')
+    # The Mac route signs the executable ad-hoc with the Increased Memory Limit entitlement (dm/ios/tools/build_ipa.sh, DM_ENTITLEMENTS): an unsigned binary has no signature for a sideloader to read
+    # entitlements from, and a game past about 3.3 GB is killed by iOS without it. A sideloader replaces the signature and keeps the entitlements. Only the executable; the bundle stays unsigned.
+    ent = root / 'DmIOS.entitlements'
+    ent.write_bytes(plistlib.dumps({'com.apple.developer.kernel.increased-memory-limit': True}))
+    subprocess.run(['xattr', '-cr', str(executable)], check=False)
+    subprocess.run(['codesign', '--force', '--sign', '-', '--entitlements', str(ent), str(executable)], check=True)
+    shown = subprocess.run(['codesign', '-d', '--entitlements', '-', str(executable)], capture_output=True, text=True)
+    if 'increased-memory-limit' not in shown.stdout + shown.stderr:
+        raise RuntimeError('The executable\'s signature has no entitlements')
     for synthetic in (app / 'romfs', app / 'msl'):
         shutil.rmtree(synthetic, ignore_errors=True)
     for t in (app / 'dm').glob('*.fixups.tsv'):   # synthetic tables; the phone writes the game's real ones
