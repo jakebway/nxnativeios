@@ -93,7 +93,7 @@ final class BuildEngine {
         guard !running, !picked.isEmpty else { return }
         let job = Paths.jobs.appendingPathComponent(ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-"))
         try? FileManager.default.createDirectory(at: job, withIntermediateDirectories: true)
-        var options: [String: Any] = ["show_fps": showFPS, "keep_build": keepBuild, "fast_build": UserDefaults.standard.object(forKey: "fastBuild") as? Bool ?? true, "small_ipa": UserDefaults.standard.object(forKey: "smallIPA") as? Bool ?? true]
+        var options: [String: Any] = ["show_fps": showFPS, "keep_build": keepBuild, "fast_build": UserDefaults.standard.object(forKey: "fastBuild") as? Bool ?? true, "small_ipa": UserDefaults.standard.object(forKey: "smallIPA") as? Bool ?? false]
         if !language.isEmpty { options["language"] = language }
         let cfg: [String: Any] = [
             "inputs": picked.map(\.path), "ipas": Paths.ipas.path, "shells": Paths.resources.appendingPathComponent("shells").path,

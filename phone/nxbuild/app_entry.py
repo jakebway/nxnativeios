@@ -390,7 +390,7 @@ def run(job_dir):
         extra = []
         if o.get('language'): extra += ['--language', o['language']]
         if 'show_fps' in o: extra += ['--show-fps' if o['show_fps'] else '--no-show-fps']
-        if o.get('small_ipa', True): extra += ['--romfs', 'separate', '--keep-extracted']   # the game files stay out of the IPA (a 36 GB IPA cannot be signed or installed): the app takes romfs.img from its Files folder
+        if o.get('small_ipa', False): extra += ['--romfs', 'separate', '--keep-extracted']   # the game files stay out of the IPA (a 36 GB IPA cannot be signed or installed): the app takes romfs.img from its Files folder
         os.environ['NXB_FAST'] = '1' if o.get('fast_build', True) else '0'
         job.set(stage='building')
         rc = driver.build(game_dir, keys, None, job.dir, log=job.log, extra=extra)
@@ -400,7 +400,7 @@ def run(job_dir):
             raise RuntimeError(reds[-1].split('[RED]', 1)[1].strip().strip('"}') if reds else f'the build stopped (exit code {rc})')
         out = Path(c['ipas']); out.mkdir(parents=True, exist_ok=True)
         dst = out / ipas[-1].name; os.replace(ipas[-1], dst)
-        if o.get('small_ipa', True):   # the game's files as one image, named the way the game looks for it, beside the IPA
+        if o.get('small_ipa', False):   # the game's files as one image, named the way the game looks for it, beside the IPA
             imgs = sorted((job.dir / 'build').rglob('RomFS.img'), key=lambda f: f.stat().st_mtime)
             if imgs:
                 fdir = out / f'{dst.stem} game files'; fdir.mkdir(parents=True, exist_ok=True)

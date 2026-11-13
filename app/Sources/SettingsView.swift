@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(BuildEngine.self) private var engine
     @AppStorage("showFPS") private var showFPS = true
-    @AppStorage("smallIPA") private var smallIPA = true
+    @AppStorage("smallIPA") private var smallIPA = false
     @AppStorage("fastBuild") private var fastBuild = true
     @AppStorage("language") private var language = ""
     @AppStorage("keepAlive") private var keepAlive = true
