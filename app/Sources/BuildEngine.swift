@@ -104,11 +104,6 @@ final class BuildEngine {
         let job = Paths.jobs.appendingPathComponent(ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-"))
         try? FileManager.default.createDirectory(at: job, withIntermediateDirectories: true)
         var options: [String: Any] = ["show_fps": showFPS, "keep_build": keepBuild, "fast_build": UserDefaults.standard.object(forKey: "fastBuild") as? Bool ?? true, "small_ipa": UserDefaults.standard.object(forKey: "smallIPA") as? Bool ?? false]
-        let store = SigningStore.shared
-        if store.ready, UserDefaults.standard.object(forKey: "signLocally") as? Bool ?? true {
-            options["sign"] = ["p12": store.p12URL.path, "profile": store.profileURL.path]
-            setenv("NXB_SIGN_PW", store.password, 1)   // in this process only; the Python build reads it from here, never from a file
-        }
         if hasIcon { options["fallback_icon"] = iconURL.path }
         if !language.isEmpty { options["language"] = language }
         let cfg: [String: Any] = [

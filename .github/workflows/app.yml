@@ -37,15 +37,6 @@ jobs:
           xc=$(find py -maxdepth 2 -name Python.xcframework -not -path '*testbed*' | head -1); [ -n "$xc" ] || xc=$(find py -name Python.xcframework | head -1)
           cp -R "$xc" $F/Python.xcframework
           ls $F; ls $F/Python.xcframework
-      - name: OpenSSL for the on-device signer
-        run: |
-          set -eu
-          git clone -q --depth 1 -b openssl-3.3.2 https://github.com/openssl/openssl.git ossl
-          cd ossl
-          ./Configure ios64-xcrun no-shared no-tests no-apps no-docs no-dso no-engine no-async --prefix="$GITHUB_WORKSPACE/app/Frameworks/openssl" >/dev/null
-          make -j"$(sysctl -n hw.ncpu)" build_libs >/dev/null 2>&1
-          make install_dev >/dev/null 2>&1
-          ls "$GITHUB_WORKSPACE/app/Frameworks/openssl/lib"
       - name: Resources (nxnative for the phone, player shells)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -130,7 +121,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete diag --cleanup-tag -y || true
       - name: Publish to the "builder" release
-        if: github.ref == 'refs/heads/main'   # other branches build and test only
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
