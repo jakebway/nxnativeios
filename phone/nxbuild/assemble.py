@@ -151,6 +151,7 @@ def assemble(out_ipa, log=None):
     src = msl_ios / msldir
     if not src.is_dir() and not Path(str(src) + '.img').is_file(): raise AssembleError(f'no shader libraries at {src}')
     if e.get('DM_COPY_ROMFS', 'YES') == 'NO':   # slim IPA: the shader libraries travel with the game files (Documents/msl, patch 0004); the app is only code and tables
+        (Path(e.get('W') or out_ipa.parent / 'ipa-work') / 'msl_src.txt').write_text(str(src if src.is_dir() else Path(str(src) + '.img')))   # where the app finds them to hand over
         _say(log, 'shader libraries: left out of the IPA; copy the msl folder into the game\'s folder in Files')
     elif src.is_dir(): _copy(src, app / 'msl' / msldir)
     else: _copy(Path(str(src) + '.img'), app / 'msl' / (msldir + '.img'))

@@ -407,7 +407,8 @@ def run(job_dir):
                 fdir = out / f'{dst.stem} game files'; fdir.mkdir(parents=True, exist_ok=True)
                 os.replace(imgs[-1], fdir / 'romfs.img'); job.log(f'game files: {fdir.name}/romfs.img ({(fdir / "romfs.img").stat().st_size / 1e9:.1f} GB)')
             else: job.log('[RED] the game files image was not found: the app will not find its game files')
-            libs = [q for d in (job.dir / 'build').rglob('dmsh_b') if d.is_dir() for q in d.iterdir() if q.name.startswith('b-')]   # the iOS shader libraries (b-<chain> or b-<chain>.img)
+            ms = job.dir / 'build/ipa/msl_src.txt'   # written by assemble.py: where the iOS shader libraries are
+            libs = [Path(ms.read_text().strip())] if ms.is_file() and Path(ms.read_text().strip()).exists() else []
             if libs:
                 mdir = out / f'{dst.stem} game files' / 'msl'; mdir.mkdir(parents=True, exist_ok=True)
                 for q in libs: shutil.rmtree(mdir / q.name, ignore_errors=True) if (mdir / q.name).is_dir() else (mdir / q.name).unlink(missing_ok=True); os.replace(q, mdir / q.name)
