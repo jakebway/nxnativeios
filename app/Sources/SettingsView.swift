@@ -25,6 +25,7 @@ struct SettingsView: View {
                 } header: { Text("Keys") } footer: {
                     Text("Pick prod.keys once; it is saved on this phone and never leaves it. title.keys is optional (most .nsp files carry their own), and one .zip holding both works too. Switch 2 games (.nup) need no keys.")
                 }
+                SigningSection()
                 Section("Games you build") {
                     Toggle("Show frame rate", isOn: $showFPS)
                     Toggle("Small IPA (game files stay in Files)", isOn: $smallIPA)
