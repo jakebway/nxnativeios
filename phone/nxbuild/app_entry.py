@@ -70,7 +70,7 @@ def open_split_zip(paths):
     return z
 
 
-DEFAULT_WEIGHTS = {'unpack': 91, 'check': 5, 'rewrite': 90, 'shader split': 303, 'ios shaders': 2700}   # seconds (a real 100 GB game on an iPhone), until the app has timed a build of its own
+DEFAULT_WEIGHTS = {'unpack': 91, 'check': 5, 'rewrite': 90, 'shader split': 303, 'ios shaders': 1900}   # seconds (a real 100 GB game on an iPhone), until the app has timed a build of its own
 GUESS = 90                                         # a stage nothing is known about
 
 
@@ -136,7 +136,7 @@ class Job:
         known = [self._weight(k) for k in self.hist if k] or [GUESS]
         total = done + cur + left * (sum(known) / len(known))
         frac = min(self.frac, 1.0)
-        if key == 'ios shaders': frac = frac * 0.55   # the compile counter is the first 55 % of the stage; the checks after it have no counter
+        if key == 'ios shaders': frac = frac * 0.80   # the compile counter is the first 80 % of the stage; the checks after it have no counter
         if self.phase:   # a step with no counter: creeps toward the end of its share of the stage, never reaching it
             t0, base, span, tau = self.phase; frac = base + span * (1 - math.exp(-(time.time() - t0) / tau))
         p = min(0.995, (done + cur * frac) / total) if total else 0.0
@@ -155,8 +155,8 @@ class Job:
             self.set(progress=self._overall())
         elif kind == 'step':
             st = ev.get('step') or ''
-            if 'shader memory reads' in st: self.phase = (time.time(), 0.55, 0.15, 420.0)    # ~5 min on a phone
-            elif 'uniform reads' in st: self.phase = (time.time(), 0.70, 0.28, 1500.0)       # ~15-25 min
+            if 'shader memory reads' in st: self.phase = (time.time(), 0.80, 0.18, 300.0)     # ~5 min on a phone
+            elif 'uniform reads' in st: self.phase = (time.time(), 0.90, 0.09, 1500.0)       # ~15-25 min (a build with the optional table)
             self.set(step=st, detail='', eta=None, progress=self._overall())
         elif kind == 'stage_end':
             key = stage_key(ev.get('name')); self.done_stages[key] = float(ev.get('elapsed') or 0); self.frac = 1.0
@@ -391,6 +391,7 @@ def run(job_dir):
         if o.get('language'): extra += ['--language', o['language']]
         if 'show_fps' in o: extra += ['--show-fps' if o['show_fps'] else '--no-show-fps']
         if o.get('small_ipa', True): extra += ['--romfs', 'separate', '--keep-extracted']   # the game files stay out of the IPA (a 36 GB IPA cannot be signed or installed): the app takes romfs.img from its Files folder
+        os.environ['NXB_FAST'] = '1' if o.get('fast_build', True) else '0'
         job.set(stage='building')
         rc = driver.build(game_dir, keys, None, job.dir, log=job.log, extra=extra)
         ipas = sorted(job.dir.glob('*.ipa'), key=lambda p: p.stat().st_mtime)

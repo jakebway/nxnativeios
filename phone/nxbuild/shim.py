@@ -164,6 +164,8 @@ def _python(args, out, env, cwd):
     else:
         script = os.path.abspath(a[0]) if cwd is None else os.path.abspath(os.path.join(cwd, a[0]))
         argv = [script, *a[1:]]; target = lambda: runpy.run_path(script, run_name='__main__')
+    if os.path.basename(a[0]) == 'cb_extent.py' and os.environ.get('NXB_FAST', '1') != '0':
+        out.write(json.dumps({'ev': 'say', 'msg': 'fast build: the optional uniform-read table is skipped (it only speeds up games that update big uniform blocks; Settings turns it back on)'}) + '\n'); return 0
     _what = {'c1_guard.py': 'checking shader memory reads (several minutes, no counter)', 'cb_extent.py': 'measuring shader uniform reads (several minutes, no counter)'}.get(os.path.basename(a[0]))
     if _what: out.write(json.dumps({'ev': 'step', 'step': _what}) + '\n')
     with _py_lock:
