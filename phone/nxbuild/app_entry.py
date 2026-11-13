@@ -293,13 +293,19 @@ def gather(job, inputs):
     rars, inputs = rar.first_volumes(inputs)
     for arc in rars:
         job.log(f'rar: {arc.name}')
+        seen = []
         def want(name):
+            seen.append(name)
             base = os.path.basename(name); low = base.lower()
             if base.startswith('.'): return None
             if low.endswith('.keys'): return str(keys_dir / base)
             if low.endswith(GAME_EXT): return str(game_dir / base)
             return None
-        for name, dst in rar.extract(arc, want): job.log(f'input: {os.path.basename(dst)} ({os.path.getsize(dst) / 1e6:.0f} MB)')
+        got = 0
+        for name, dst in rar.extract(arc, want): got += 1; job.log(f'input: {os.path.basename(dst)} ({os.path.getsize(dst) / 1e6:.0f} MB)')
+        if not got:   # say what the archive holds, so a nested archive or an odd name can be seen
+            job.log(f'rar: {arc.name} holds {len(seen)} entries, none a .keys or game file: ' + '; '.join(seen[:8]))
+            raise RuntimeError(f'{arc.name} holds no game file or keys. Inside it: ' + (', '.join(os.path.basename(n) for n in seen[:5]) or 'nothing the app could read') + ('…' if len(seen) > 5 else ''))
     groups, inputs = split_groups(inputs)
     for name, paths in groups:
         job.log(f'split zip: {name} ({len(paths)} parts)')
