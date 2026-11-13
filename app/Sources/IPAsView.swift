@@ -31,7 +31,6 @@ struct IPAsView: View {
                         Spacer(minLength: 4)
                         ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up").font(.body.weight(.semibold)).frame(width: 40, height: 40).background(.tint.opacity(0.15), in: Circle()) }.buttonStyle(.borderless)
                     }
-                    GameFilesCard(ipa: f.url)
                     }
                     .padding(.vertical, 4)
                     .contextMenu {
