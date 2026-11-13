@@ -71,14 +71,11 @@ struct BuildView: View {
                     Text("Your IPA is ready").font(.title3.weight(.semibold))
                     Text([url.deletingPathExtension().lastPathComponent, bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }].compactMap { $0 }.joined(separator: " · "))
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    if FileManager.default.fileExists(atPath: url.deletingPathExtension().path + " game files/romfs.img") {
-                        Text("After installing, open Files → On My iPhone → NXnativeiOS → IPAs → “\(url.deletingPathExtension().lastPathComponent) game files”, copy romfs.img and the msl folder, and paste both into the game's own folder (On My iPhone → the game).")
-                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    }
                     if FileManager.default.fileExists(atPath: url.path) {
-                        ShareLink(item: url) { Label("Share to FlareStore", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
+                        ShareLink(item: url) { Label("Install with FlareStore", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                     }
+                    GameFilesCard(ipa: url)
                     HStack(spacing: 24) {
                         Button("See it in IPAs") { engine.tab = 1 }
                         Button("Open in Files") { openInFiles(Paths.ipas) }
@@ -165,6 +162,15 @@ enum DocPicker {
         let p = UIDocumentPickerViewController(forOpeningContentTypes: [.item, .data, .zip], asCopy: true)
         p.allowsMultipleSelection = true
         let d = Delegate(onPick); holder = d; p.delegate = d
+        var top = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }?.rootViewController
+        while let n = top?.presentedViewController { top = n }
+        top?.present(p, animated: true)
+    }
+
+    /// a folder, in place (security-scoped, not copied): where the game's files are sent
+    static func presentFolder(onPick: @escaping (URL) -> Void) {
+        let p = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
+        let d = Delegate { if let u = $0.first { onPick(u) } }; holder = d; p.delegate = d
         var top = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }?.rootViewController
         while let n = top?.presentedViewController { top = n }
         top?.present(p, animated: true)

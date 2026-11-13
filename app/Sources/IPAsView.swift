@@ -18,6 +18,7 @@ struct IPAsView: View {
                     ContentUnavailableView("No IPAs yet", systemImage: "shippingbox", description: Text("Games you build appear here, ready to sign."))
                 }
                 ForEach(files) { f in
+                    VStack(spacing: 10) {
                     HStack(spacing: 14) {
                         Image(systemName: "gamecontroller.fill").font(.title3).foregroundStyle(.white)
                             .frame(width: 48, height: 48)
@@ -29,6 +30,8 @@ struct IPAsView: View {
                         }
                         Spacer(minLength: 4)
                         ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up").font(.body.weight(.semibold)).frame(width: 40, height: 40).background(.tint.opacity(0.15), in: Circle()) }.buttonStyle(.borderless)
+                    }
+                    GameFilesCard(ipa: f.url)
                     }
                     .padding(.vertical, 4)
                     .contextMenu {
