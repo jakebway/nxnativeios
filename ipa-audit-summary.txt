@@ -1,0 +1,5 @@
+IPA AUDIT: PASSED
+IPA: out/NXnativeiOS.ipa (25524664 bytes)
+Mach-O binaries checked: 79; bundle ids: 79
+
+No errors.
