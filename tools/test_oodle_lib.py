@@ -49,5 +49,6 @@ if hasattr(lib, 'nxb_lz5_compress'):   # the test build has LZ5's compressor too
             if n <= 0 or got != len(data) or out.raw != data: print(f'LZ5 level {lv} sample {i}: FAIL ({n}, {got})'); fails += 1
     print('LZ5 round trip at 28 levels:', 'ok' if not fails else 'FAILED')
 mism = [k for k, v in by.items() if len(set(v.values())) != 1]
+for k in mism: print('  ', k, by[k])
 print('formats of one file that differ:', mism or 'none', '|', 'failures:', fails)
 sys.exit(1 if (mism or fails) else 0)

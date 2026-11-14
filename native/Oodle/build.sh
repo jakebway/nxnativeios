@@ -21,11 +21,11 @@ LZ5L="$OUT/lz5/lib"; ccc=$(echo "$cc" | sed 's/clang++/clang/')
 for s in lz5_decompress.c entropy/huf_decompress.c entropy/fse_decompress.c entropy/entropy_common.c ${OODLE_TEST:+lz5_compress.c entropy/huf_compress.c entropy/fse_compress.c}; do
   $ccc -std=gnu99 -O2 -fPIC -w -fvisibility=hidden -I"$LZ5L" -I"$LZ5L/entropy" -c "$LZ5L/$s" -o "$OUT/lz5_$(basename "$s" .c)-$1.o"
 done
-$cc -std=c++17 -O2 -fPIC -w -fvisibility=hidden -I"$LZ5L" ${OODLE_TEST:+-DNXB_TEST} -c "$HERE/nxb_lz5.cpp" -o "$OUT/nxb_lz5-$1.o"
+$cc -std=c++17 -O2 -fPIC -w -fno-strict-aliasing -fwrapv -fvisibility=hidden -I"$LZ5L" ${OODLE_TEST:+-DNXB_TEST} -c "$HERE/nxb_lz5.cpp" -o "$OUT/nxb_lz5-$1.o"
 # kraken.cpp (+ the two other decoders it dispatches to); -fno-exceptions: ooz reports errors by return value
-$cc -std=c++17 -O2 -fPIC -w -fvisibility=hidden -I"$OUT/ooz" -I"$OUT/simde" -I"$HERE" -c "$HERE/nxb_oodle.cpp" -o "$OUT/nxb_oodle-$1.o"
-$cc -std=c++17 -O2 -fPIC -w -DOOZ_BUILD_DLL=1 -I"$OUT/ooz" -I"$OUT/simde" -c "$OUT/ooz/bitknit.cpp" -o "$OUT/bitknit-$1.o"
-$cc -std=c++17 -O2 -fPIC -w -DOOZ_BUILD_DLL=1 -I"$OUT/ooz" -I"$OUT/simde" -c "$OUT/ooz/lzna.cpp" -o "$OUT/lzna-$1.o"
+$cc -std=c++17 -O2 -fPIC -w -fno-strict-aliasing -fwrapv -fvisibility=hidden -I"$OUT/ooz" -I"$OUT/simde" -I"$HERE" -c "$HERE/nxb_oodle.cpp" -o "$OUT/nxb_oodle-$1.o"
+$cc -std=c++17 -O2 -fPIC -w -fno-strict-aliasing -fwrapv -DOOZ_BUILD_DLL=1 -I"$OUT/ooz" -I"$OUT/simde" -c "$OUT/ooz/bitknit.cpp" -o "$OUT/bitknit-$1.o"
+$cc -std=c++17 -O2 -fPIC -w -fno-strict-aliasing -fwrapv -DOOZ_BUILD_DLL=1 -I"$OUT/ooz" -I"$OUT/simde" -c "$OUT/ooz/lzna.cpp" -o "$OUT/lzna-$1.o"
 if [ "$1" = linux ]; then $cc -shared -o "$OUT/libOodle-$1.$ext" "$OUT"/nxb_oodle-$1.o "$OUT"/bitknit-$1.o "$OUT"/lzna-$1.o "$OUT"/nxb_lz5-$1.o "$OUT"/lz5_*-$1.o
 else $cc -dynamiclib -o "$OUT/libOodle-$1.$ext" "$OUT"/nxb_oodle-$1.o "$OUT"/bitknit-$1.o "$OUT"/lzna-$1.o "$OUT"/nxb_lz5-$1.o "$OUT"/lz5_*-$1.o -install_name @rpath/Oodle.framework/Oodle; fi
 nm -gD "$OUT/libOodle-$1.$ext" 2>/dev/null | grep nxb_ || nm -gU "$OUT/libOodle-$1.$ext" | grep nxb_
