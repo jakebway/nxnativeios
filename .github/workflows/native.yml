@@ -104,11 +104,16 @@ jobs:
       - name: macOS arm64 build, decoded against ooz's own test streams (Kraken, Mermaid, Selkie, Leviathan must agree) and an LZ5 round trip
         run: |
           OODLE_TEST=1 native/Oodle/build.sh macos out
-          python3 tools/test_oodle_lib.py out/libOodle-macos.dylib out/ooz/testdata
+          # the test streams are Powzix's (ooz's original repository): the same files in every format, a few of them
+          mkdir out/oozdata && cd out/oozdata && git init -q && git remote add origin https://github.com/powzix/ooz
+          git sparse-checkout set --no-cone '/testdata/dickens.*' '/testdata/xml.*' '/testdata/mr.*' '/testdata/nci.*' '/testdata/osdb.*'
+          git fetch -q --depth 1 --filter=blob:none origin 05038060aa68f9187ae9923b2388ca8db40e58d1
+          git checkout -q FETCH_HEAD; cd ../..
+          python3 tools/test_oodle_lib.py out/libOodle-macos.dylib out/oozdata/testdata
       - name: the phone's stand-in for the Mac host, driven by nxnative's own scripts (uepak.OodleHost, shader_split.oodle_ask, a job file)
         run: |
           ci/prepare_upstream.sh
-          NXB_OODLE_LIB=$PWD/out/libOodle-macos.dylib python3 tools/test_oodle_phone.py upstream out/ooz/testdata
+          NXB_OODLE_LIB=$PWD/out/libOodle-macos.dylib python3 tools/test_oodle_phone.py upstream out/oozdata/testdata
       - name: iOS framework
         run: |
           native/Oodle/build.sh ios out
