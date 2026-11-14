@@ -1,6 +1,15 @@
 HANDOFF: nxnativeios (NX Builder) - read this first
 ====================================================
 
+LATEST (read before the older sections below, which are history)
+- The phone builds a game end to end and the small/split IPA (code only; romfs.img and msl/ go in the game's folder in Files) signs, installs and boots (menu, audio).
+- Player shells for all 161 games are built by CI (shells-data branch) and downloaded on demand; RAR input works.
+- Oodle / LZ5 games (Pokemon Scarlet/Sword/Arceus/Legends Z-A, DQXI S/III/VII, Octopath 0/II, Bayonetta 3, SMT V, ...): nxnative decodes their packs by booting the game in its Mac host.
+  The phone does that decoder step with Oodle.framework (native/Oodle: ooz + LZ5 2.0.1; phone/nxbuild/oodle.py plays the host for DM_OODLE_SERVE / DM_OODLE_JOB; driver.py patches build_mac_host;
+  shim.py routes the Popen). CI checks it on an arm64 Mac (tools/test_oodle_lib.py, tools/test_oodle_phone.py). NOT yet run on a phone with a real game: first test = Pokemon Legends: Z-A.
+  Still impossible on a phone: steps that RUN the game (run-time shader capture, heap check, jit_capture): shim says so and stops.
+- Oodle.framework is GPL-3 (ooz): native/Oodle/NOTICE.md.
+
 GOAL
 An iPhone app ("NX Builder") that runs fully on the phone, no Mac. The user picks prod.keys, title.keys,
 game NSP/XCI etc. (as .zip or as individual files; NEVER a folder picker, it fails for this user),
