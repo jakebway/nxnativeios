@@ -24,7 +24,7 @@ jobs:
         run: |
           list="${{ inputs.games }}"
           # default: Super Mario Bros. Wonder (NVN), Hades (Vulkan), Digimon Story Cyber Sleuth (OpenGL), as nxnative's own CI, and Ocarina of Time (Switch 2)
-          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000 0400486024DEC000"
+          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000 0400486024DEC000 0100F43008C44000"
           echo "games=$(printf '%s\n' $list | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
           echo "commit=$(cat ci/nxnative.commit)" >> "$GITHUB_OUTPUT"
 
