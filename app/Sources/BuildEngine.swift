@@ -107,7 +107,7 @@ final class BuildEngine {
         if hasIcon { options["fallback_icon"] = iconURL.path }
         if !language.isEmpty { options["language"] = language }
         let cfg: [String: Any] = [
-            "inputs": picked.map(\.path), "ipas": Paths.ipas.path, "shells": Paths.resources.appendingPathComponent("shells").path,
+            "inputs": picked.map(\.path), "ipas": Paths.ipas.path, "shells": Paths.resources.appendingPathComponent("shells").path, "shell_cache": Paths.support.appendingPathComponent("Shells").path,
             "upstream_zip": Paths.resources.appendingPathComponent("nxnative.zip").path, "upstream": Paths.upstream.path, "options": options,
         ]
         try? JSONSerialization.data(withJSONObject: cfg, options: .prettyPrinted).write(to: job.appendingPathComponent("job.json"))

@@ -166,3 +166,39 @@ int nxb_icon_png(const char *src, const char *dst, int px) {
         return ok ? 0 : 6;
     }
 }
+
+/// Download url to dst (synchronous; Python has no CA certificates on the phone, so the player shells come through NSURLSession). progress(done, total) is called now and then.
+/// 0 ok, else the HTTP status (404: no such file) or -1 for a network error (the message goes to err).
+typedef void (*nxb_progress_fn)(long long done, long long total);
+__attribute__((used, visibility("default")))
+int nxb_download(const char *url, const char *dst, nxb_progress_fn progress, char *err, int errlen) {
+    @autoreleasepool {
+        NSURL *u = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
+        NSString *to = [NSString stringWithUTF8String:dst];
+        dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+        __block int rc = -1;
+        NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+        cfg.timeoutIntervalForRequest = 60; cfg.timeoutIntervalForResource = 1800;
+        NSURLSession *s = [NSURLSession sessionWithConfiguration:cfg];
+        NSURLSessionDownloadTask *t = [s downloadTaskWithURL:u completionHandler:^(NSURL *loc, NSURLResponse *resp, NSError *e) {
+            if (e) { if (err && errlen > 0) snprintf(err, errlen, "%s", e.localizedDescription.UTF8String); rc = -1; }
+            else {
+                long st = [(NSHTTPURLResponse *)resp statusCode];
+                if (st != 200) rc = (int)st;
+                else {
+                    NSFileManager *fm = NSFileManager.defaultManager; NSError *me = nil;
+                    [fm removeItemAtPath:to error:nil];
+                    rc = [fm moveItemAtURL:loc toURL:[NSURL fileURLWithPath:to] error:&me] ? 0 : -1;
+                    if (rc && err && errlen > 0) snprintf(err, errlen, "%s", me.localizedDescription.UTF8String);
+                }
+            }
+            dispatch_semaphore_signal(sem);
+        }];
+        [t resume];
+        while (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 500 * NSEC_PER_MSEC))) {
+            if (progress) progress(t.countOfBytesReceived, t.countOfBytesExpectedToReceive);
+        }
+        [s finishTasksAndInvalidate];
+        return rc;
+    }
+}

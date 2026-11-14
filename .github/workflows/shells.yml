@@ -1,16 +1,28 @@
 name: Player shells
 
-# Builds one game-less player shell per game profile (no game data anywhere) and attaches them to the
-# "shells" release, where the phone app downloads the one for your game.
+# One game-less player shell per nxnative game profile (no game data anywhere), with the profile itself, on the shells-data branch
+# under <nxnative commit>/: shell-<title ID>.zip and profile-<title ID>.zip. The phone downloads the pair for the game it builds, once.
+# With no title IDs it builds every profile nxnative has that is not on the branch yet for this commit.
 on:
   workflow_dispatch:
     inputs:
       games:
-        description: "Title IDs, space separated (empty = the default set)"
+        description: "Title IDs, space separated (empty = every game nxnative supports that has no shell yet)"
         default: ""
+      force:
+        description: "Rebuild even the ones already built"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [ci/nxnative.commit, patches/**, tools/build_shell.py]
 
 permissions:
   contents: write
+
+concurrency:
+  group: shells
+  cancel-in-progress: false
 
 jobs:
   list:
@@ -18,23 +30,38 @@ jobs:
     outputs:
       games: ${{ steps.g.outputs.games }}
       commit: ${{ steps.g.outputs.commit }}
+      count: ${{ steps.g.outputs.count }}
     steps:
       - uses: actions/checkout@v4
       - id: g
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -eu
+          c=$(cat ci/nxnative.commit)
           list="${{ inputs.games }}"
-          # default: Super Mario Bros. Wonder (NVN), Hades (Vulkan), Digimon Story Cyber Sleuth (OpenGL), as nxnative's own CI, and Ocarina of Time (Switch 2)
-          [ -n "$list" ] || list="010015100B514000 0100535012974000 010014E00DB56000 0400486024DEC000 0100F43008C44000"
-          echo "games=$(printf '%s\n' $list | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
-          echo "commit=$(cat ci/nxnative.commit)" >> "$GITHUB_OUTPUT"
+          if [ -z "$list" ]; then
+            git clone -q --filter=blob:none --no-checkout https://github.com/seedds/nxnative.git up
+            list=$(git -C up ls-tree --name-only "$c" dm/games/ | sed -n 's|^dm/games/\([0-9A-F]\{16\}\)$|\1|p')
+          fi
+          if [ "${{ inputs.force }}" != "true" ]; then   # skip the ones this commit already has
+            have=$(git ls-remote --exit-code origin shells-data >/dev/null 2>&1 && { git fetch -q --depth 1 origin shells-data && git ls-tree --name-only FETCH_HEAD "$c/" | sed -n 's|.*/shell-\([0-9A-F]\{16\}\)\.zip$|\1|p'; } || true)
+            list=$(printf '%s\n' $list | grep -vxF -f <(printf '%s\n' $have) || true)
+          fi
+          n=$(printf '%s\n' $list | grep -c . || true)
+          echo "games: $n"; printf '%s\n' $list | head -300
+          echo "games=$(printf '%s\n' $list | grep . | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "commit=$c" >> "$GITHUB_OUTPUT"
 
   shell:
     needs: list
+    if: needs.list.outputs.count != '0'
     runs-on: xcode-27
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 5
       matrix:
         game: ${{ fromJson(needs.list.outputs.games) }}
     steps:
@@ -57,14 +84,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          z="$PWD/out/shell-${{ matrix.game }}.zip"; d=$(mktemp -d); cd $d
+          g=${{ matrix.game }}; c=${{ needs.list.outputs.commit }}
+          W=$PWD; z="$W/out/shell-$g.zip"; p="$W/out/profile-$g.zip"
+          (cd upstream/dm/games && zip -qr -9 "$p" "$g" -x '*/__pycache__/*')
+          d=$(mktemp -d); cd $d
           git init -q; git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          for i in 1 2 3 4 5 6; do
-            if git fetch -q --depth 1 origin shells-data; then git checkout -q -B shells-data FETCH_HEAD; else git checkout -q --orphan shells-data; fi
-            cp "$z" .
-            git add -A; git commit -q -m "shell ${{ matrix.game }} (nxnative ${{ needs.list.outputs.commit }})" || true
-            git push -q origin shells-data && exit 0 || sleep $((RANDOM % 10 + 3))
+          for i in $(seq 1 12); do
+            if git fetch -q --depth 1 origin shells-data; then git checkout -q -f -B shells-data FETCH_HEAD; else git checkout -q --orphan shells-data; fi
+            mkdir -p "$c"; cp "$z" "$p" "$c/"
+            git add -A; git commit -q -m "shell $g (nxnative $c)" || true
+            git push -q origin shells-data && exit 0 || sleep $((RANDOM % 20 + 5))
           done
           exit 1
       - uses: actions/upload-artifact@v4

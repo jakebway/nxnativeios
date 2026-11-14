@@ -386,11 +386,15 @@ def run(job_dir):
         job.set(stage='reading your files')
         keys, game_dir = gather(job, c['inputs'])
         tid = base_title(keys, game_dir, job.log)
-        shells = Path(c['shells'])
+        shells = Path(c.get('shell_cache') or Path(c['shells']).parent / 'Shells')
         if tid:
             job.log(f'game: {tid}')
-            if not (shells / f'shell-{tid}.zip').is_file():
-                raise RuntimeError(f'no player shell for {tid} in this build of the app: add the title ID to the "Player shells" workflow, then rebuild the app')
+            from . import shells as sh
+            if not sh.supported(tid):
+                raise RuntimeError(f'nxnative does not support this game yet ({tid}): every game needs a profile made on a Mac first. The supported games are listed at github.com/seedds/nxnative')
+            job.set(stage='getting the player')
+            z = sh.get(tid, shells, c['shells'], job.log)
+            shells = z.parent
         os.environ['NXB_SHELLS'] = str(shells)
         o = c.get('options', {})
         extra = []

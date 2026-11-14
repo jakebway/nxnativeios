@@ -61,7 +61,7 @@ struct SettingsView: View {
                     } header: { Text("Crash reports") } footer: { Text("How iOS says the app ended (a crash, or closed for memory or time). It can arrive a day late.") }
                 }
                 Section("About") {
-                    LabeledContent("Supported games", value: "\(supported) bundled player shells")
+                    LabeledContent("Supported games", value: supported > 0 ? "\(supported) (every game nxnative supports)" : "every game nxnative supports")
                     Text("Built on nxnative (MIT). Your games and keys stay on this phone. Not affiliated with Nintendo.").font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -71,7 +71,8 @@ struct SettingsView: View {
     }
 
     private var supported: Int {
-        ((try? FileManager.default.contentsOfDirectory(atPath: Paths.resources.appendingPathComponent("shells").path)) ?? []).filter { $0.hasSuffix(".zip") }.count
+        // the list of nxnative's game profiles, unpacked with nxnative at the first build; each game's player is downloaded when it is first built
+        ((try? String(contentsOf: Paths.upstream.appendingPathComponent("dm/games/supported.txt"), encoding: .utf8)) ?? "").split(whereSeparator: \.isNewline).count
     }
     private func measure() {
         var total: Int64 = 0

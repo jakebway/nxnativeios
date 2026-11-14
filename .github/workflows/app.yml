@@ -37,34 +37,22 @@ jobs:
           xc=$(find py -maxdepth 2 -name Python.xcframework -not -path '*testbed*' | head -1); [ -n "$xc" ] || xc=$(find py -name Python.xcframework | head -1)
           cp -R "$xc" $F/Python.xcframework
           ls $F; ls $F/Python.xcframework
-      - name: Resources (nxnative for the phone, player shells)
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Resources (nxnative for the phone; the player shells are downloaded by the phone, one per game)
         run: |
           set -eu
-          R=app/NXData; mkdir -p $R/shells
-          git clone -q --depth 1 -b shells-data "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-src 2>/dev/null || {
-            # one-time move of the shells from the old "shells" release to the shells-data branch
-            gh release download shells -R "$GITHUB_REPOSITORY" -p 'shell-*.zip' -D shells-mig
-            ( cd shells-mig && git init -q && git config user.name 'github-actions[bot]' && git config user.email '41898282+github-actions[bot]@users.noreply.github.com' \
-              && git checkout -q --orphan shells-data && git add -A && git commit -q -m "shells (moved from the shells release)" \
-              && git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-data )
-            git clone -q --depth 1 -b shells-data "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" shells-src
-          }
-          cp shells-src/shell-*.zip $R/shells/
-          gh release delete shells --cleanup-tag -y || true
-          ls $R/shells
+          R=app/NXData; mkdir -p $R
           # nxnative as the phone runs it: pristine C# sources (nx_extract / dmsh_xlate --source-sha compare against them), no .git, no Mac executables
           rm -rf phone-up && cp -R upstream phone-up && rm -rf phone-up/.git
           for t in dm/tools/nx_extract dm/gfx/tools/dmsh_xlate; do mv phone-up/$t/Program_cs.orig phone-up/$t/Program.cs; done
           rm -f phone-up/dm/tools/nx_extract_bin/nx_extract phone-up/dm/gfx/tools/dmsh_xlate_bin/dmsh_xlate phone-up/dm/gfx/tools/spirv_cross_bin/spirv-cross
           rm -rf phone-up/docs/images
-          # the 159 game profiles are 520 MB; the app only needs the profiles that have a player shell (a big IPA also fails to install)
-          keep=$(ls $R/shells | sed -n 's/^shell-\([0-9A-F]\{16\}\)\.zip$/\1/p')
-          for d in phone-up/dm/games/*/; do b=$(basename $d); if echo "$b" | grep -qE '^[0-9A-F]{16}$' && ! echo "$keep" | grep -qx "$b"; then rm -rf "$d"; fi; done
-          ls phone-up/dm/games
+          # the game profiles are 520 MB: the app keeps only the list of them; the phone downloads a game's profile with its player shell
+          ( cd phone-up/dm/games && ls | grep -E '^[0-9A-F]{16}$' > ../supported.txt )
+          for d in phone-up/dm/games/*/; do b=$(basename $d); echo "$b" | grep -qE '^[0-9A-F]{16}$' && rm -rf "$d"; done
+          mv phone-up/dm/supported.txt phone-up/dm/games/supported.txt; wc -l phone-up/dm/games/supported.txt
+          cp ci/nxnative.commit phone-up/.nxb_commit
           (cd phone-up && zip -qr -9 ../$R/nxnative.zip .)
-          du -sh $R/nxnative.zip $R/shells
+          du -sh $R/nxnative.zip
       - name: Python packages
         run: |
           set -eu
