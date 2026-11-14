@@ -1,0 +1,17 @@
+diff --git a/dm/tools/patch_nso.py b/dm/tools/patch_nso.py
+index 77be1995..976efcf9 100644
+--- a/dm/tools/patch_nso.py
++++ b/dm/tools/patch_nso.py
+@@ -1658,8 +1658,11 @@ SPIN_LSE = ('ldadd', 'ldclr', 'ldeor', 'ldset', 'ldsmax', 'ldsmin', 'ldumax', 'l
+ SPIN_BAD = {'bl', 'blr', 'br', 'ret', 'eret', 'svc', 'hvc', 'smc', 'brk', 'hlt', 'udf', 'mrs', 'msr', 'sys', 'sysl', 'wfe', 'wfi', 'sev', 'sevl', 'clrex', 'dc', 'ic', 'at',
+             'tlbi', 'drps', 'dcps1', 'dcps2', 'dcps3', 'blraa', 'blrab', 'blraaz', 'blrabz', 'braa', 'brab', 'braaz', 'brabz', 'retaa', 'retab', 'eretaa', 'eretab'}
+ spin_dec = {}
++SPIN_DEC_MAX = 50000   # a decoded instruction with its detail is a few kB in Python: a large main (Pokemon Legends Z-A) cached millions and took 6 GB, past an iPhone's limit
+ def spin_ins(a):
+-    if a not in spin_dec: spin_dec[a] = next(md.disasm(bytes(IMG[a:a + 4]), a), None)
++    if a not in spin_dec:
++        if len(spin_dec) >= SPIN_DEC_MAX: spin_dec.clear()   # dropped ones are decoded again when asked: the same result
++        spin_dec[a] = next(md.disasm(bytes(IMG[a:a + 4]), a), None)
+     return spin_dec[a]
+ def spin_norm(n):
+     n = {'fp': 'x29', 'lr': 'x30', 'wsp': 'sp'}.get(n, n)
