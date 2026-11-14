@@ -3,7 +3,7 @@ name: Native tools (iOS frameworks)
 # nxnative's C# tools as one iOS framework the builder app calls: NxTools (nx_extract: NSP/XCI extraction with your prod.keys; dmsh_xlate: shader translation).
 on:
   push:
-    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/test_oodle_lib.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
+    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/test_oodle_lib.py', 'tools/test_oodle_phone.py', 'phone/nxbuild/oodle.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
   workflow_dispatch:
   workflow_call:
 
