@@ -32,6 +32,9 @@ targets:
       - framework: Frameworks/Unrar.framework
         embed: true
         link: false   # loaded by Python's ctypes at run time (RAR archives)
+      - framework: Frameworks/Oodle.framework
+        embed: true
+        link: false   # loaded by Python's ctypes at run time (Oodle and LZ5 decoding of game packs)
       - framework: Frameworks/capstone.framework
         embed: true
         link: false   # loaded by Python's ctypes at run time

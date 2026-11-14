@@ -4,7 +4,7 @@ name: Builder app IPA
 on:
   workflow_dispatch:
   push:
-    paths: ['app/**', 'phone/**', 'tools/mkgameframework.py', 'ci/install_python.py', 'ci/make_variants.py', 'ci/audit_ipa.py', 'ci/make_icon.py', '.github/workflows/app.yml']
+    paths: ['app/**', 'phone/**', 'native/Oodle/**', 'tools/mkgameframework.py', 'ci/install_python.py', 'ci/make_variants.py', 'ci/audit_ipa.py', 'ci/make_icon.py', '.github/workflows/app.yml']
 
 permissions:
   contents: write
@@ -30,7 +30,7 @@ jobs:
         run: |
           set -eu
           F=app/Frameworks; mkdir -p $F
-          for z in art/NxTools.framework/NxTools.framework.zip art/SpirvCross.framework/SpirvCross.framework.zip art/Unrar.framework/Unrar.framework.zip; do ditto -x -k "$z" $F; done
+          for z in art/NxTools.framework/NxTools.framework.zip art/SpirvCross.framework/SpirvCross.framework.zip art/Unrar.framework/Unrar.framework.zip art/Oodle.framework/Oodle.framework.zip; do ditto -x -k "$z" $F; done
           cp -R art/pydeps/capstone.framework $F/
           curl -fL --retry 5 -o py.tgz "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-iOS-XCframework.tar.gz"
           mkdir py && tar xzf py.tgz -C py

@@ -25,6 +25,9 @@ def _phone_checks(mod):
     mod.check_prereqs = check_prereqs
     mod.check_native_python = lambda: None   # no Rosetta on a phone
     mod.check_ios_sdk = lambda env: None
+    # the Mac host's decoder step (Oodle / LZ5 decoding of game files): Oodle.framework does it (oodle.py); what the scripts call "the host" is a marker file the shim answers for
+    from . import oodle
+    mod.build_mac_host = lambda repo, out, env, logs, g: oodle.host_marker(out)
 
 
 def _trace_steps(mod):

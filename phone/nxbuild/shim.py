@@ -204,6 +204,10 @@ def _dispatch(args, out, out_bin, stdin, env, cwd):
     if exe == 'sysctl': return _sysctl(rest, out)
     if exe == 'xcode-select': out.write('/nxnativeios/xcode\n'); return 0
     if exe == 'zstd': return _zstd(rest, out_bin, stdin)
+    if exe == 'dmhost_oodle':   # the Mac host's decoder step (oodle.py); booting the game itself is not possible here
+        from . import oodle
+        if env and env.get('DM_OODLE_JOB'): return oodle.run_job(env['DM_OODLE_JOB'], log=lambda l: out.write(l + '\n'))
+        out.write('[RED] nxnativeios: this step runs the game itself in nxnative\'s Mac host (to capture the shaders it makes while it runs), which a phone cannot do\n'); return 127
     if exe == 'bash' and rest and rest[0].endswith('build_ipa.sh'): return _build_ipa(rest[1:], out, env)
     out.write(f'[RED] nxnativeios: "{exe}" cannot run on the phone ({" ".join(map(str, args))[:200]})\n')
     return 127
@@ -224,6 +228,14 @@ def _build_ipa(args, out, env):
 
 class InProcess:
     """subprocess.Popen's interface; the command runs in this process: at construction, or at communicate() when it reads stdin."""
+    def __new__(cls, args=None, *a, **kw):
+        # the Mac host as a request / answer pipe (DM_OODLE_SERVE): a conversation, not a command that runs once
+        env = kw.get('env')
+        if isinstance(args, (list, tuple)) and args and os.path.basename(str(args[0])) == 'dmhost_oodle' and env and env.get('DM_OODLE_SERVE'):
+            from . import oodle
+            return oodle.Process(args, stderr=kw.get('stderr'), log=LOG)
+        return object.__new__(cls)
+
     def __init__(self, args, bufsize=-1, executable=None, stdin=None, stdout=None, stderr=None, preexec_fn=None, close_fds=True, shell=False,
                  cwd=None, env=None, universal_newlines=None, startupinfo=None, creationflags=0, restore_signals=True, start_new_session=False,
                  pass_fds=(), *, user=None, group=None, extra_groups=None, encoding=None, errors=None, text=None, umask=-1, pipesize=-1, process_group=None):

@@ -40,6 +40,15 @@ def run(_arg=''):
         from . import rar
         return f'UnRAR library API {rar.version()}'
     check('RAR (unrar)', unrar)
+    def oodle_check():
+        from . import oodle
+        data = b'nxnativeios oodle self test ' * 3
+        if oodle.decode(b'\xcc\x06' + data, len(data)) != data: raise RuntimeError('an Oodle block did not decode')
+        if oodle.decode(b'\xcc\x06' + data, len(data) + 5) is not None: raise RuntimeError('a stream shorter than asked for was accepted')
+        lz5 = bytes.fromhex('2d80600000000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f')
+        if oodle.decode(lz5, 96) != bytes(range(32)) * 3: raise RuntimeError('an LZ5 stream did not decode')
+        return 'Oodle (Kraken, Mermaid, Leviathan) and LZ5 decoders load and decode'
+    check('Oodle (decoder for the games\' packs)', oodle_check)
     def fw():
         from . import mkgameframework as mk
         d = tempfile.mkdtemp(); data = os.urandom(0x14000)

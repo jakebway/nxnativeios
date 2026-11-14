@@ -79,10 +79,6 @@ def stage_key(name):
     return re.sub(r'\s+', ' ', re.sub(r'\(?\bv?\d[\w.]*\b\)?|\bof\b', ' ', name or '')).strip().lower()
 
 
-class MacHostNeeded(RuntimeError):
-    pass
-
-
 class Job:
     def __init__(self, d):
         self.dir = Path(d); self.cfg = json.loads((self.dir / 'job.json').read_text())
@@ -110,13 +106,7 @@ class Job:
         if line.startswith('{"ev"'): return any(f'"ev": "{k}"' in line for k in ('say', 'stage', 'step', 'stage_end'))
         return False
 
-    NEEDS_MAC_HOST = 'in the Mac host (dm/host/hle_oodle.c DM_OODLE_SERVE)'   # nxnative's own note that this game's shaders are Oodle-compressed and are decoded by booting the game in the Mac host
-
     def log(self, line):
-        if self.NEEDS_MAC_HOST in line and not getattr(self, '_macmsg', False):
-            self._macmsg = True
-            self.logf.write(line.rstrip('\n') + '\n')
-            raise MacHostNeeded('This game packs its graphics in Oodle-compressed files, and nxnative decodes them by booting the game in its Mac host. A phone cannot run that step yet, so this game cannot be built here. Games without Oodle packs (most of the supported list) are not affected.')
         self.logf.write(line.rstrip('\n') + '\n')
         if self._story(line): self.story.write(line.rstrip('\n') + '\n')
         if line.startswith('{"ev"'): self._event(line)

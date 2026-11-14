@@ -56,6 +56,6 @@ Offline iOS flags (`dm/ios/tools/ios_metal.py METAL`): `-O1 -mios-version-min=18
 
 ## Scope of version 1
 
-Games whose profile in `dm/games/<title ID>/` registers the exact version being built. Unregistered versions and provisional profiles need steps that boot the game in the Mac host (heap check, address regions, run-time shader capture, `jit_capture.py`): not on the phone. NSZ/XCZ need `nsz` (Python, zstandard): later.
+Games whose profile in `dm/games/<title ID>/` registers the exact version being built. Unregistered versions and provisional profiles need steps that boot the game in the Mac host (heap check, address regions, run-time shader capture, `jit_capture.py`): not on the phone. The Mac host's *decoder* step is different: games whose files are Oodle-compressed (Unreal pak shader archives, Trinity packs, PlatinumGames PKZ, IoStore) or LZ5-compressed (DRAGON QUEST XI S) are decoded by Oodle.framework (`native/Oodle`: ooz + LZ5 2.0.1) instead of the game's own code; `phone/nxbuild/oodle.py` plays the host for `DM_OODLE_SERVE` / `DM_OODLE_JOB`, and `driver.py` / `shim.py` route nxnative's `build_mac_host` / `boot_mac` / `subprocess` calls to it. NSZ/XCZ need `nsz` (Python, zstandard): later.
 
 Builds are long (upstream: 30–60 min on a Mac for a first build). iOS suspends background apps: the builder keeps the screen awake and resumes from the build folder (upstream reuses finished steps by fingerprint).

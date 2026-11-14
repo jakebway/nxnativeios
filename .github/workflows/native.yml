@@ -3,7 +3,7 @@ name: Native tools (iOS frameworks)
 # nxnative's C# tools as one iOS framework the builder app calls: NxTools (nx_extract: NSP/XCI extraction with your prod.keys; dmsh_xlate: shader translation).
 on:
   push:
-    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
+    paths: ['native/**', 'ci/**', 'tools/test_nxtools_lib.py', 'tools/test_spirvcross_lib.py', 'tools/test_oodle_lib.py', 'tools/testdata/**', '.github/workflows/native.yml', 'patches/**']
   workflow_dispatch:
   workflow_call:
 
@@ -95,3 +95,35 @@ jobs:
         with:
           name: Unrar.framework
           path: out/Unrar.framework.zip
+
+  oodle:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: macOS arm64 build, decoded against ooz's own test streams (Kraken, Mermaid, Selkie, Leviathan must agree) and an LZ5 round trip
+        run: |
+          OODLE_TEST=1 native/Oodle/build.sh macos out
+          python3 tools/test_oodle_lib.py out/libOodle-macos.dylib out/ooz/testdata
+      - name: the phone's stand-in for the Mac host, driven by nxnative's own scripts (uepak.OodleHost, shader_split.oodle_ask, a job file)
+        run: |
+          ci/prepare_upstream.sh
+          NXB_OODLE_LIB=$PWD/out/libOodle-macos.dylib python3 tools/test_oodle_phone.py upstream out/ooz/testdata
+      - name: iOS framework
+        run: |
+          native/Oodle/build.sh ios out
+          fw=out/Oodle.framework; mkdir -p $fw
+          cp out/libOodle-ios.dylib $fw/Oodle
+          install_name_tool -id @rpath/Oodle.framework/Oodle $fw/Oodle
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleIdentifier string org.nxnativeios.Oodle' -c 'Add :CFBundleExecutable string Oodle' \
+            -c 'Add :CFBundlePackageType string FMWK' -c 'Add :CFBundleVersion string 1' -c 'Add :CFBundleShortVersionString string 1.0' \
+            -c 'Add :CFBundleSupportedPlatforms array' -c 'Add :CFBundleSupportedPlatforms:0 string iPhoneOS' \
+            -c 'Add :MinimumOSVersion string 26.0' $fw/Info.plist
+          otool -l $fw/Oodle | grep -A4 LC_BUILD_VERSION
+          nm -gU $fw/Oodle | grep -E '_nxb_(oodle|lz5)_decompress'
+          codesign -s - -f $fw && codesign -v $fw && du -sh $fw
+          (cd out && ditto -c -k --keepParent Oodle.framework Oodle.framework.zip)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Oodle.framework
+          path: out/Oodle.framework.zip
