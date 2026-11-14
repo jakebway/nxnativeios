@@ -29,7 +29,7 @@ os.environ['DM_OODLE_HOST'] = str(host); os.environ['DM_OODLE_MODULES'] = '/tmp/
 spec.loader.exec_module(ss)
 res = {}
 def work(i):
-    nm = ['xml.mermaid', 'xml.kraken', 'osdb.selkie', 'reymont.leviathan'][i % 4]
+    nm = ['xml.mermaid', 'xml.kraken', 'osdb.selkie', 'dickens.leviathan'][i % 4]
     c, r = sample(nm)
     for _ in range(3): s, gone = ss.oodle_ask(c, r); res[(i, _)] = (nm, s is not None and len(s) == r, gone)
 ts = [threading.Thread(target=work, args=(i,)) for i in range(8)]; [t.start() for t in ts]; [t.join() for t in ts]
