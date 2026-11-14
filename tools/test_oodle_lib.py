@@ -14,6 +14,7 @@ def decode(comp, n):
     return f(comp, len(comp), out, n), out.raw
 
 by = collections.defaultdict(dict)
+outs = {}
 fails = 0
 for p in sorted(glob.glob(sys.argv[2] + '/*.*')):
     name, kind = os.path.basename(p).rsplit('.', 1)
@@ -25,6 +26,7 @@ for p in sorted(glob.glob(sys.argv[2] + '/*.*')):
     ok = got == n
     fails += not ok
     by[name][kind] = hashlib.sha1(raw).hexdigest()[:12] if ok else None
+    if ok and name in ('xml', 'dickens'): outs[(name, kind)] = raw
     print(f'{os.path.basename(p):22} {len(d):>9} -> {n:>9}  {"ok  " if ok else "FAIL"} {n / dt / 1e6:6.0f} MB/s')
     if kind == 'kraken' and ok and name == 'dickens':
         tail, _ = decode(d[hs:] + b'\0\0\0\0', n)   # bytes after the last block are not an error (the game's own decoder takes them)
@@ -49,6 +51,13 @@ if hasattr(lib, 'nxb_lz5_compress'):   # the test build has LZ5's compressor too
             if n <= 0 or got != len(data) or out.raw != data: print(f'LZ5 level {lv} sample {i}: FAIL ({n}, {got})'); fails += 1
     print('LZ5 round trip at 28 levels:', 'ok' if not fails else 'FAILED')
 mism = [k for k, v in by.items() if len(set(v.values())) != 1]
-for k in mism: print('  ', k, by[k])
+for k in mism:
+    print('  ', k, by[k])
+    ref = outs.get((k, 'kraken')); 
+    for kind in ('mermaid', 'selkie', 'leviathan'):
+        o = outs.get((k, kind))
+        if ref and o and o != ref:   # where the first stream that disagrees with Kraken's output goes wrong
+            d = [i for i in range(len(ref)) if ref[i] != o[i]]
+            print(f'      {kind}: {len(d)} bytes differ, first at {d[0]:#x} (quantum {d[0] >> 18}, +{d[0] & 0x3ffff:#x}); kraken {ref[d[0]-8:d[0]+24].hex()} / {kind} {o[d[0]-8:d[0]+24].hex()}')
 print('formats of one file that differ:', mism or 'none', '|', 'failures:', fails)
 sys.exit(1 if (mism or fails) else 0)

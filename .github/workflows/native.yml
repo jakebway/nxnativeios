@@ -109,7 +109,7 @@ jobs:
           git sparse-checkout set --no-cone '/testdata/dickens.*' '/testdata/xml.*' '/testdata/mr.*' '/testdata/nci.*' '/testdata/osdb.*'
           git fetch -q --depth 1 --filter=blob:none origin 05038060aa68f9187ae9923b2388ca8db40e58d1
           git checkout -q FETCH_HEAD; cd ../..
-          python3 tools/test_oodle_lib.py out/libOodle-macos.dylib out/oozdata/testdata
+          python3 tools/test_oodle_lib.py out/libOodle-macos.dylib out/oozdata/testdata || { echo '--- the same at -O0'; OODLE_OPT=-O0 OODLE_TEST=1 native/Oodle/build.sh macos out0 >/dev/null; python3 tools/test_oodle_lib.py out0/libOodle-macos.dylib out/oozdata/testdata | tail -8; exit 1; }
       - name: the phone's stand-in for the Mac host, driven by nxnative's own scripts (uepak.OodleHost, shader_split.oodle_ask, a job file)
         run: |
           ci/prepare_upstream.sh
