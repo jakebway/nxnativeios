@@ -2,7 +2,7 @@ name: Phone-side Python (shim, assembler, driver)
 
 on:
   push:
-    paths: ['phone/**', 'tools/test_splitmem.py', 'tools/mkgameframework.py', '.github/workflows/phone-python.yml']
+    paths: ['phone/**', 'tools/test_splitmem.py', 'tools/test_cleanup.py', 'tools/mkgameframework.py', '.github/workflows/phone-python.yml']
   workflow_dispatch:
 
 jobs:
@@ -23,6 +23,8 @@ jobs:
           glslangValidator -V tools/testdata/test.frag -o test.spv
       - name: The memory-bounded shader split writes what the original writes
         run: python tools/test_splitmem.py upstream
+      - name: Disk check and cleanup
+        run: python tools/test_cleanup.py
       - name: Shim against nxnative's scripts
         run: NXB_FRAMEWORKS=$PWD/fw python phone/tests/test_shim.py upstream test.spv
       - name: "Driver through nxnative build script (no game, must stop at the game scan)"

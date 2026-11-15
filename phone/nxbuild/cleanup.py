@@ -56,7 +56,7 @@ def preflight(inputs, where, log):
     if free < need: log(f'[RED] storage is tight: {free / 1e9:.0f} GB free, {need / 1e9:.0f} GB is safer. The build goes on and gives space back as it goes; if it stops for space, free some and build again.')
 
 
-_TEMP_PREFIXES = ('split-spill-', 'nxb-', 'nxnative-')
+_TEMP_PREFIXES = ('split-spill-',)   # the files this app makes in the temp folder
 
 
 def sweep_temp(log=None, older_than=1800):
