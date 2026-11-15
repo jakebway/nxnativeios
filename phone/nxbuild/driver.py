@@ -30,6 +30,59 @@ def _phone_checks(mod):
     mod.build_mac_host = lambda repo, out, env, logs, g: oodle.host_marker(out)
 
 
+def _phone_shaders(mod):
+    """The iOS shader step, for a phone's disk and time.
+
+    Some games' profiles list the shaders their playtests used (shader_seen.tsv: for Pokémon Pokopia 8,157 of 131,426). The script builds only those for a Mac (--seen-shaders) and refuses it for an
+    iPhone build; dmsh_build.py itself takes a key list for either target, and a library with only those keys is what the Mac's partial build already runs on. So for these games the phone builds the
+    listed shaders (and the pixel shaders paired with them) into the iOS library, in minutes and with a sixteenth of the disk; a shader the list does not cover is reported as missing by the game and
+    draws without it. NXB_SEEN=0 builds the whole map (hours, and tens of GB). Either way the step's big work files (the shader package, the per-shader cache) go the moment it ends: the next step
+    reads only the finished library."""
+    from . import cleanup
+    orig = mod.build_shaders
+
+    def seen_for_phone(g, mac, seen):
+        if mac or seen or os.environ.get('NXB_SEEN') == '0': return None
+        try:
+            if not g.table('shader_seen.tsv').is_file(): return None
+            known = mod.shader_keys(g); listed = mod.seen_listed(g) & set(known)
+        except Exception: return None
+        return sorted(listed) if listed and len(listed) * 4 < len(known) else None
+
+    def seen_ios(py, repo, sh, xlate, env, logs, g, keys, pull):
+        chain = mod.chain_of(repo); ios = sh / 'ios'; log = logs / 'dmsh_build.log'
+        mod.PROG.stage('iOS shaders')
+        mod.say(f'building the {len(keys):,} shaders the game\'s playtests used (of {len(mod.shader_keys(g)):,}); the rest draw as missing (NXB_SEEN=0 in env builds the whole map)')
+        mod.rmtree(ios / f'b-{chain}.key')
+        for p in (ios / f'b-{chain}', ios / f'b-{chain}.img'): mod.rmtree(p)
+        benv = dict(env, XLATE=str(xlate), IOSOUT=str(ios), DMSH_TARGETS='ios', DMSH_CAS=str(sh / 'cache/cas.db'))
+        if mod.ALLOW_OTHER_METAL: benv['DM_ALLOW_OTHER_METAL'] = '1'
+        if pull is False: benv['DMSH_IOS_PULL'] = '0'
+        prog = sh / 'progress.json'; mod.rmtree(prog); benv['DMSH_PROGRESS'] = str(prog)
+        try: mod.PROG.watch(mod.ShaderWatch(prog))
+        except Exception: pass
+        mod.run([py, repo / 'dm/gfx/tools/own_compilers.py', sh / 'pkg', sh / 'cache', *keys], log, env=benv)
+        mod.PROG.watch(None)
+        libs = ios / f'b-{chain}'
+        n = sum(1 for _ in mod.shader_lib.view(libs).glob('*_b.metallib')) if mod.shader_lib.exists(libs) else 0
+        if n == 0: raise mod.BuildError(f'no iOS shader libraries in {libs}')
+        mod.shader_lib.pack(libs, mod.say, leave_out=pull is False)
+        mod.say(f'{n:,} iOS shader libraries ({libs})')
+        mod.PROG.end(f'{n:,} shaders ready (the playtests\' set)')
+        return ios
+
+    def build_shaders(py, repo, sh, xlate, env, logs, g, pkg_key=None, mac=False, seen=None, pull=None):
+        keys = seen_for_phone(g, mac, seen)
+        out = seen_ios(py, repo, sh, xlate, env, logs, g, keys, pull) if keys else orig(py, repo, sh, xlate, env, logs, g, pkg_key, mac, seen, pull)
+        if not mac:   # the library is finished: the package it was built from and the per-shader cache are only for a later build of the same folder, and every build has a folder of its own
+            n = 0
+            for d in ('pkg', 'cache', 'partial'):
+                n += cleanup._size(sh / d); mod.rmtree(sh / d)
+            if n: mod.say(f'[cleanup] freed {n / 1e9:.1f} GB: the shader package and cache (the finished library stays)')
+        return out
+    mod.build_shaders = build_shaders
+
+
 def _trace_steps(mod):
     """Marks (into the full log only) around the script's helper steps, and a chunked file hash: the script hashes every file of a package with read_bytes(), a whole file in memory at once."""
     import functools, hashlib, time
@@ -86,6 +139,7 @@ def build(game_dir, keys, shell_app, out_dir=None, log=None, extra=()):
     sys.path.insert(0, str(script.parent))
     spec.loader.exec_module(mod)
     _phone_checks(mod)
+    _phone_shaders(mod)
     _trace_steps(mod)
     argv = [str(game_dir), *(['-k', str(keys)] if keys else []), '--gpu', 'none', '--allow-other-metal', '--progress', 'json', *extra]
     if out_dir: argv += ['--work-dir', str(Path(out_dir) / 'build')]
