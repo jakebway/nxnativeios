@@ -93,24 +93,63 @@ def _size(p):
     except OSError: return 0
 
 
-def after_failure(job_dir, log):
-    """the game's extraction stays (the next try starts from it); the rest of the work goes: the game file copy, unfinished folders, the shader packages, the spill file"""
+KEEP = {'log.txt', 'story.txt', 'status.json', 'job.json', 'hist.json'}   # what a job folder keeps once its work is done: the log and the status
+
+
+def free_work(job_dir, log=None, why=''):
+    """everything in a job folder but its log and status: a job's extraction is not reused by the next job (each build has a folder of its own), so keeping it only fills the disk"""
     job_dir = Path(job_dir); freed = 0
-    victims = partials(job_dir) + [job_dir / 'input/game'] + list((job_dir / 'build').glob('*/shader/pkg*')) + list((job_dir / 'build').glob('*/shader/split-spill-*'))
-    for p in victims:
-        if not p.exists(): continue
+    try: kids = list(job_dir.iterdir())
+    except OSError: return 0
+    for p in kids:
+        if p.name in KEEP or p.suffix == '.ipa': continue
         n = _size(p)
-        try: shutil.rmtree(p) if p.is_dir() else p.unlink()
+        try: shutil.rmtree(p) if p.is_dir() and not p.is_symlink() else p.unlink()
         except OSError: continue
         freed += n
-    freed += sweep_temp(None, older_than=0)
-    if freed: log(f'[cleanup] freed {freed / 1e9:.1f} GB after the failure (the extracted game stays for the next try)')
+    if freed and log: log(f'[cleanup] freed {freed / 1e9:.1f} GB{(": " + why) if why else ""}')
     return freed
+
+
+def purge_old_jobs(current, log=None):
+    """at the start of a build: the work files of every earlier job go (a failed or stopped build leaves its whole extraction behind, and the app can run for days without a launch to clear them)"""
+    current = Path(current); n = 0
+    for d in current.parent.iterdir():
+        if d.is_dir() and d != current: n += free_work(d)
+    if n and log: log(f'[cleanup] freed {n / 1e9:.1f} GB: the work files of earlier builds')
+    return n
+
+
+def after_failure(job_dir, log):
+    """a failed build gives back all its work files (only the log and status stay)"""
+    freed = free_work(job_dir) + sweep_temp(None, older_than=0)
+    if freed: log(f'[cleanup] freed {freed / 1e9:.1f} GB after the failure')
+    return freed
+
+
+def tree_bytes(root):
+    """the size of a folder tree, by file (used by the watchdog: the folders it lists tell where the disk went)"""
+    n = 0
+    for dp, dirs, files in os.walk(root):
+        for f in files:
+            try: n += os.lstat(os.path.join(dp, f)).st_size
+            except OSError: pass
+    return n
+
+
+def breakdown(job_dir):
+    """→ [(name, bytes)] of what is in the job folder, largest first"""
+    out = []
+    try:
+        for p in Path(job_dir).iterdir():
+            out.append((p.name, tree_bytes(p) if p.is_dir() and not p.is_symlink() else p.lstat().st_size))
+    except OSError: pass
+    return sorted(out, key=lambda t: -t[1])
 
 
 def friendly(e, where):
     """the error text the app shows: storage errors say what to do"""
     msg = str(e)
     if (isinstance(e, OSError) and e.errno == errno.ENOSPC) or 'No space left' in msg or 'disk full' in msg.lower():
-        return f'The phone ran out of storage during the build ({free_gb(where):.1f} GB free now). Free some space in Settings > General > iPhone Storage and build again: the app keeps what it already unpacked.'
+        return f'The phone ran out of storage during the build ({free_gb(where):.1f} GB free now). Free some space in Settings > General > iPhone Storage and build again: the half-finished build was cleared.'
     return msg

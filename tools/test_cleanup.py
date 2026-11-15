@@ -19,7 +19,13 @@ cleanup.free_bytes = real
 j = d / 'job'
 for sub, data in (('build/x/shader/pkg/a.bin', 1000), ('build/extract.partial/f', 500), ('input/game/g.nsp', 100), ('build/extract/keep', 1)): (j / sub).parent.mkdir(parents=True, exist_ok=True); (j / sub).write_bytes(b'.' * data)
 cleanup.after_failure(j, lambda m: None)
-left = sorted(str(p.relative_to(j)) for p in j.rglob('*') if p.is_file()); assert left == ['build/extract/keep'], left   # only the extraction stays
+(j / 'log.txt').write_text('log')
+cleanup.after_failure(j, lambda m: None)
+left = sorted(str(p.relative_to(j)) for p in j.rglob('*') if p.is_file()); assert left == ['log.txt'], left   # only the log stays
+# earlier jobs' work goes when a new job starts
+old = d / 'jobs/2026-01-01'; new = d / 'jobs/2026-01-02'; (old / 'build').mkdir(parents=True); (old / 'build/x').write_bytes(b'.' * 999); (old / 'log.txt').write_text('l'); new.mkdir(parents=True); (new / 'build').mkdir(); (new / 'build/y').write_bytes(b'.')
+assert cleanup.purge_old_jobs(new) == 999 and not (old / 'build').exists() and (old / 'log.txt').exists() and (new / 'build/y').exists()
+assert cleanup.breakdown(new)[0][0] == 'build'
 t = Path(tempfile.gettempdir()) / 'split-spill-test'; t.write_bytes(b'0' * 10); os.utime(t, (time.time() - 4000,) * 2)
 assert cleanup.sweep_temp(None) >= 10 and not t.exists()
 assert 'ran out of storage' in cleanup.friendly(OSError(errno.ENOSPC, 'No space left on device'), d)

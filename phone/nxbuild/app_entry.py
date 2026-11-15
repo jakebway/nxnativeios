@@ -269,6 +269,37 @@ def watch_memory(job):
     threading.Thread(target=beat, daemon=True).start()
 
 
+def watch_disk(job, floor_gb=3.0):
+    """The disk, watched while a build runs: a line every two minutes with the job's biggest folders (a log that says where the space went), and a stop before the disk is full: the work
+    files are given back, the build is marked failed with a plain message, and the build thread is interrupted (the app is killed if it does not stop within a minute, which is better than
+    a full phone)."""
+    import threading, _thread, ctypes
+    from . import cleanup
+    main_id = threading.get_ident()
+    def stop(msg):
+        job.log(f'[RED] {msg}')
+        try: cleanup.after_failure(job.dir, job.log)
+        except Exception: pass
+        job.set(state='failed', error=msg)
+        try: ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(main_id), ctypes.py_object(KeyboardInterrupt))
+        except Exception: pass
+        time.sleep(60); os._exit(3)
+    def loop():
+        t = 0
+        while True:
+            try:
+                free = cleanup.free_gb(job.dir)
+                if time.time() - t >= 120 or free < 10:
+                    t = time.time()
+                    top = ', '.join(f'{n} {b / 1e9:.1f} GB' for n, b in cleanup.breakdown(job.dir)[:5] if b > 5e7)
+                    job.log(f'[disk] {free:.1f} GB free; job folder: {top or "small"}')
+                if free < floor_gb:
+                    stop(f'The phone is out of storage ({free:.1f} GB free): the build was stopped and its work files were cleared. Free some space in Settings > General > iPhone Storage and build again.')
+            except Exception: pass
+            time.sleep(5)
+    threading.Thread(target=loop, daemon=True).start()
+
+
 def ensure_upstream(zip_path, dest, log):
     """nxnative's scripts and profiles, unpacked once into a writable folder (the script writes into the profiles; the app bundle is read-only)."""
     dest = Path(dest); stamp = dest / '.nxb_stamp'
@@ -394,6 +425,8 @@ def run(job_dir):
         shim.install(log=job.log)
         from . import cleanup
         cleanup.sweep_temp(job.log)
+        cleanup.purge_old_jobs(job.dir, job.log)
+        watch_disk(job)
         cleanup.preflight(c['inputs'], job.dir, job.log)
         job.set(stage='reading your files')
         keys, game_dir = gather(job, c['inputs'])
@@ -437,6 +470,7 @@ def run(job_dir):
                 job.log(f'game files: {dst.stem} game files/msl (shader libraries)')
             else: job.log('[RED] the shader libraries were not found: the app will have no shaders')
         if not o.get('keep_build'): shutil.rmtree(job.dir / 'build', ignore_errors=True); shutil.rmtree(job.dir / 'input', ignore_errors=True)
+        if not o.get('keep_build'): cleanup.free_work(job.dir, job.log, 'the build\'s work files')
         job.finish_times()
         job.set(state='done', stage='done', progress=1.0, ipa=str(dst), detail='', eta=None)
         job.log(f'done: {dst.name}')
