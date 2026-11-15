@@ -31,6 +31,19 @@ struct IPAsView: View {
                         Spacer(minLength: 4)
                         ShareLink(item: f.url) { Image(systemName: "square.and.arrow.up").font(.body.weight(.semibold)).frame(width: 40, height: 40).background(.tint.opacity(0.15), in: Circle()) }.buttonStyle(.borderless)
                     }
+                    if let g = gameFiles(for: f) {   // the game's files, beside its IPA: one tap to the folder, one to copy them to the app's Documents once it is installed
+                        HStack(spacing: 10) {
+                            Image(systemName: "folder.fill").foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Game files").font(.subheadline.weight(.medium))
+                                Text(ByteCountFormatter.string(fromByteCount: g.size, countStyle: .file) + " · copy to the game's folder after installing").font(.caption2).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 4)
+                            Button { openInFiles(g.url) } label: { Label("Open", systemImage: "folder").font(.subheadline) }.buttonStyle(.bordered).controlSize(.small)
+                            if let r = g.image { ShareLink(item: r) { Image(systemName: "square.and.arrow.up") }.buttonStyle(.bordered).controlSize(.small) }
+                        }
+                        .padding(10).background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                     }
                     .padding(.vertical, 4)
                     .contextMenu {
@@ -70,7 +83,19 @@ struct IPAsView: View {
             return IPAFile(url: u, size: Int64(v?.fileSize ?? 0), date: v?.contentModificationDate ?? .distantPast)
         }.sorted { $0.date > $1.date }
     }
-    private func delete(_ f: IPAFile) { try? FileManager.default.removeItem(at: f.url); load() }
+    /// "<name> game files" beside the IPA (romfs.img and the msl folder), when the build left them out of the IPA
+    private func gameFiles(for f: IPAFile) -> (url: URL, size: Int64, image: URL?)? {
+        let dir = f.url.deletingPathExtension().path + " game files"
+        let u = URL(fileURLWithPath: dir, isDirectory: true)
+        guard FileManager.default.fileExists(atPath: u.path) else { return nil }
+        let img = u.appendingPathComponent("romfs.img")
+        return (u, Storage.size(u), FileManager.default.fileExists(atPath: img.path) ? img : nil)
+    }
+    private func delete(_ f: IPAFile) {
+        try? FileManager.default.removeItem(at: f.url)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: f.url.deletingPathExtension().path + " game files"))   // nothing left behind
+        load()
+    }
     private func rename() {
         guard let f = renaming else { return }
         let clean = newName.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "/", with: "-")
