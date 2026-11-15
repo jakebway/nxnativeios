@@ -123,6 +123,11 @@ final class BuildEngine {
         guard !running, !picked.isEmpty else { return }
         let job = Paths.jobs.appendingPathComponent(ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-"))
         try? FileManager.default.createDirectory(at: job, withIntermediateDirectories: true)
+        for var d in [Paths.jobs, Paths.imports] {   // gigabytes of scratch files must never go into an iCloud or computer backup
+            var v = URLResourceValues(); v.isExcludedFromBackup = true; try? d.setResourceValues(v)
+        }
+        let pi = ProcessInfo.processInfo
+        if pi.isLowPowerModeEnabled { logTail.append("[RED] Low Power Mode is on: the phone runs at about half speed. Turn it off for a faster build.") }
         var options: [String: Any] = ["show_fps": showFPS, "keep_build": keepBuild, "fast_build": UserDefaults.standard.object(forKey: "fastBuild") as? Bool ?? true, "small_ipa": UserDefaults.standard.object(forKey: "smallIPA") as? Bool ?? true]
         if hasIcon { options["fallback_icon"] = iconURL.path }
         if !language.isEmpty { options["language"] = language }
