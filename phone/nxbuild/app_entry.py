@@ -145,6 +145,9 @@ class Job:
 
     def _event2(self, ev):
         kind = ev.get('ev'); k, n = ev.get('k'), ev.get('n') or self.status.get('n')
+        if kind == 'stage':
+            try: from . import cleanup; self.log(f'[disk] {cleanup.free_gb(self.dir):.1f} GB free')
+            except Exception: pass
         if kind == 'stage' and stage_key(ev.get('name')) == 'rewrite':
             self.free('input/game', 'the game file copy (its contents are unpacked)')
         if kind == 'stage_end' and stage_key(ev.get('name')).startswith('ios shaders'):
@@ -183,7 +186,8 @@ class Job:
         """Disk space back as soon as nothing needs a file any more: a big game takes 100 GB of work files if they all stay until the end."""
         try:
             p = self.dir / what if isinstance(what, str) else what
-            n = sum(f.stat().st_size for f in p.rglob('*') if f.is_file()) if p.is_dir() else (p.stat().st_size if p.exists() else 0)
+            own = lambda f: f.stat().st_nlink == 1   # a second name for a file that stays (the picked copy in Imports/) gives nothing back
+            n = sum(f.stat().st_size for f in p.rglob('*') if f.is_file() and own(f)) if p.is_dir() else (p.stat().st_size if p.exists() and own(p) else 0)
             shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
             if n: self.log(f'[cleanup] freed {n / 1e9:.1f} GB: {note}')
         except Exception: pass
@@ -281,13 +285,18 @@ def gather(job, inputs):
     """Keys and game files from the picked .zip files and single files, into <job>/input/{keys,game}."""
     keys_dir, game_dir = job.dir / 'input/keys', job.dir / 'input/game'
     for d in (keys_dir, game_dir): d.mkdir(parents=True, exist_ok=True)
-    def take(name, opener):
+    def take(name, opener, link=None):
         base = os.path.basename(name)
         if base.startswith('._') or base.startswith('.'): return
         low = base.lower()
         dst = keys_dir / base if low.endswith('.keys') else game_dir / base if low.endswith(GAME_EXT) else None
         if dst is None: return
-        with opener() as src, open(dst, 'wb') as out: shutil.copyfileobj(src, out, 8 << 20)
+        done = False
+        if link is not None:   # a plain file the app itself holds (Imports/): a second name for the same bytes, not a second 7 GB and a minute of copying
+            try: dst.unlink(missing_ok=True); os.link(link, dst); done = True
+            except OSError: done = False
+        if not done:
+            with opener() as src, open(dst, 'wb') as out: shutil.copyfileobj(src, out, 8 << 20)
         job.log(f'input: {base} ({dst.stat().st_size / 1e6:.0f} MB)')
     from . import rar
     rars, inputs = rar.first_volumes(inputs)
@@ -318,7 +327,7 @@ def gather(job, inputs):
             with zipfile.ZipFile(p) as z:
                 for zi in z.infolist():
                     if not zi.is_dir(): take(zi.filename, lambda zi=zi: z.open(zi))
-        else: take(str(p), lambda p=p: open(p, 'rb'))
+        else: take(str(p), lambda p=p: open(p, 'rb'), link=p)
     keys = sorted(keys_dir.glob('*.keys'), key=lambda k: (k.name.lower() != 'prod.keys', k.name))
     if not keys and any(f.suffix.lower() == '.nup' for f in game_dir.iterdir()):
         if not any(game_dir.iterdir()): raise RuntimeError('no game file among the files')
@@ -383,6 +392,9 @@ def run(job_dir):
         from . import capfix, shim, driver
         capfix.prepare(job.log)
         shim.install(log=job.log)
+        from . import cleanup
+        cleanup.sweep_temp(job.log)
+        cleanup.preflight(c['inputs'], job.dir, job.log)
         job.set(stage='reading your files')
         keys, game_dir = gather(job, c['inputs'])
         tid = base_title(keys, game_dir, job.log)
@@ -430,7 +442,12 @@ def run(job_dir):
         job.log(f'done: {dst.name}')
         return 0
     except BaseException as e:
-        job.log(traceback.format_exc()); job.set(state='failed', error=str(e)); return 1
+        job.log(traceback.format_exc())
+        try:
+            from . import cleanup
+            msg = cleanup.friendly(e, job.dir); cleanup.after_failure(job.dir, job.log)
+        except Exception: msg = str(e)
+        job.set(state='failed', error=msg); return 1
     finally:
         sys.stdout, sys.stderr = so, se
         shutil.rmtree(job.dir / 'input/keys', ignore_errors=True)   # never keep a copy of the keys
