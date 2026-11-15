@@ -345,6 +345,16 @@ def _avail():
     except Exception: return None
 
 
+def _size(path):
+    """a file's size: the game's files are often inside RomFS.img, where only upstream's romfs.stat can see them (os.path.getsize raised and every task weighed 0, so nothing was gated)"""
+    try: return os.path.getsize(path)
+    except OSError: pass
+    try:
+        import romfs
+        return romfs.stat(path).st_size
+    except Exception: return 0
+
+
 def _weight(args):
     """what a pooled task is expected to hold in memory: the jobs it names (a path, its name, and for a range of an archive more) -> bytes. A whole file is read and decoded in one go
     (about three times its size); a range of a big archive holds a fraction"""
@@ -353,8 +363,7 @@ def _weight(args):
         nonlocal w
         if isinstance(x, (list, tuple)) and depth < 3:
             if x and isinstance(x[0], str) and len(x[0]) > 1 and x[0][0] == '/' and len(x) >= 2:
-                try: s = os.path.getsize(x[0])
-                except OSError: s = 0
+                s = _size(x[0])
                 w += 3 * s if len(x) <= 2 else min(3 * s, 512 << 20)
             else:
                 for y in x: walk(y, depth + 1)
