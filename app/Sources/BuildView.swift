@@ -45,16 +45,21 @@ struct BuildView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(engine.gameName ?? "Your game").font(.headline).lineLimit(2)
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(Int((s?.progress ?? 0) * 100))%").font(.system(size: 44, weight: .semibold, design: .rounded)).monospacedDigit()
+                    if let k = s?.k, let n = s?.n, n > 0 {
+                        Text("\(min(k, n))/\(n)").font(.system(size: 44, weight: .semibold, design: .rounded)).monospacedDigit()
+                    } else { Text("Starting").font(.system(size: 28, weight: .semibold, design: .rounded)) }
                     Spacer()
                     Text(s?.stage ?? "Starting").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.trailing).lineLimit(2)
                 }
-                ProgressView(value: s?.progress ?? 0)
-                HStack {
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s?.elapsed))") }
-                    Spacer()
-                    if let e = s?.eta, e > 1 { Text("About \(clock(e)) left") }
-                }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                if let k = s?.k, let n = s?.n, n > 0 {   // one segment per step: a step is done or it is not, nothing pretends to be 37 %
+                    HStack(spacing: 4) {
+                        ForEach(1...n, id: \.self) { i in
+                            Capsule().fill(i < k ? Color.accentColor : i == k ? Color.accentColor.opacity(0.55) : Color.secondary.opacity(0.25)).frame(height: 6)
+                        }
+                    }
+                }
+                TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s?.elapsed))") }
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 if let d = s?.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
             }.padding(.vertical, 4)
         } footer: { Text("You can leave the app: it keeps building. Big games take a while.") }

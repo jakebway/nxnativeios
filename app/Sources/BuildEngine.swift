@@ -11,6 +11,8 @@ struct JobStatus: Decodable {
     var detail: String?
     var eta: Double?
     var elapsed: Double?
+    var k: Int?      // the step the build is on (1 ...)
+    var n: Int?      // how many steps this build has
 }
 
 @Observable @MainActor
