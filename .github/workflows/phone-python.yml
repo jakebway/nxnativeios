@@ -2,7 +2,7 @@ name: Phone-side Python (shim, assembler, driver)
 
 on:
   push:
-    paths: ['phone/**', 'tools/mkgameframework.py', '.github/workflows/phone-python.yml']
+    paths: ['phone/**', 'tools/test_splitmem.py', 'tools/mkgameframework.py', '.github/workflows/phone-python.yml']
   workflow_dispatch:
 
 jobs:
@@ -21,6 +21,8 @@ jobs:
           native/SpirvCross/build.sh macos out && mkdir -p fw && cp out/libSpirvCross-macos.dylib fw/libSpirvCross.dylib
           python -m pip install glslang 2>/dev/null || brew install glslang
           glslangValidator -V tools/testdata/test.frag -o test.spv
+      - name: The memory-bounded shader split writes what the original writes
+        run: python tools/test_splitmem.py upstream
       - name: Shim against nxnative's scripts
         run: NXB_FRAMEWORKS=$PWD/fw python phone/tests/test_shim.py upstream test.spv
       - name: "Driver through nxnative build script (no game, must stop at the game scan)"
