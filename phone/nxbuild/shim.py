@@ -337,6 +337,64 @@ class ThreadPool:
     def __exit__(self, *e): self.terminate() if e[0] else self.join()
 
 
+def _avail():
+    """the bytes iOS says this app can still allocate (os_proc_available_memory), None where there is no such call"""
+    try:
+        f = ctypes.CDLL(None).os_proc_available_memory; f.restype = ctypes.c_size_t
+        return f()
+    except Exception: return None
+
+
+def _weight(args):
+    """what a pooled task is expected to hold in memory: the jobs it names (a path, its name, and for a range of an archive more) -> bytes. A whole file is read and decoded in one go
+    (about three times its size); a range of a big archive holds a fraction"""
+    w = 0
+    def walk(x, depth=0):
+        nonlocal w
+        if isinstance(x, (list, tuple)) and depth < 3:
+            if x and isinstance(x[0], str) and len(x[0]) > 1 and x[0][0] == '/' and len(x) >= 2:
+                try: s = os.path.getsize(x[0])
+                except OSError: s = 0
+                w += 3 * s if len(x) <= 2 else min(3 * s, 512 << 20)
+            else:
+                for y in x: walk(y, depth + 1)
+    walk(args)
+    return w
+
+
+class _GatedExecutor:
+    """concurrent.futures.ProcessPoolExecutor for the phone: threads in this process, so every worker's memory is the app's. nxnative sizes its pool to the CPUs and lets each worker read
+    whole game files; on a Mac that is fine, here six workers on gigabyte files run the app out of memory (iOS kills it). A task starts when the app has room for what it names (weighed by
+    _weight) and for a margin; the first one always starts, and one that waited two minutes starts anyway (a task that waits for its own children must not hang)."""
+    BUDGET, LOW = 3500 << 20, 2400 << 20
+    def __init__(self, max_workers=None, initializer=None, initargs=()):
+        import concurrent.futures as cf
+        self._ex = cf.ThreadPoolExecutor(max_workers, initializer=initializer, initargs=initargs)
+        self._c, self._running, self._held = threading.Condition(), 0, 0
+    def _run(self, fn, a, k):
+        w = min(_weight(a), self.BUDGET)
+        t0 = time.monotonic()
+        with self._c:
+            while self._running and time.monotonic() - t0 < 120:
+                free = _avail()
+                if self._held + w <= self.BUDGET and (free is None or free - w > self.LOW): break
+                self._c.wait(0.5)
+            self._running += 1; self._held += w
+        if w > (700 << 20) and LOG: LOG(f'[memory] a task of about {w >> 20} MB starts ({self._running} running)')
+        try: return fn(*a, **k)
+        finally:
+            with self._c: self._running -= 1; self._held -= w; self._c.notify_all()
+    def submit(self, fn, /, *a, **k): return self._ex.submit(self._run, fn, a, k)
+    def map(self, fn, *its, timeout=None, chunksize=1):
+        fs = [self.submit(fn, *x) for x in zip(*its)]
+        def gen():
+            for f in fs: yield f.result(timeout)
+        return gen()
+    def shutdown(self, wait=True, *, cancel_futures=False): self._ex.shutdown(wait=wait, cancel_futures=cancel_futures)
+    def __enter__(self): return self
+    def __exit__(self, *e): self.shutdown(wait=True); return False
+
+
 class _Context:
     """multiprocessing.get_context('fork') and friends: the real context, with Pool replaced"""
     def __init__(self, real): self._real = real
@@ -354,7 +412,7 @@ def install(log=None):
     real_ctx = multiprocessing.get_context
     multiprocessing.Pool = ThreadPool
     multiprocessing.get_context = lambda method=None: _Context(real_ctx(None))
-    cf.ProcessPoolExecutor = lambda max_workers=None, mp_context=None, initializer=None, initargs=(), **k: cf.ThreadPoolExecutor(max_workers, initializer=initializer, initargs=initargs)
+    cf.ProcessPoolExecutor = lambda max_workers=None, mp_context=None, initializer=None, initargs=(), **k: _GatedExecutor(max_workers, initializer, initargs)
     os.environ.setdefault('DM_REWRITE_J', '1')     # patch_nso.py: no worker processes
     os.environ.setdefault('DMSH_PROCS', '0')       # dmsh_build.py: threads, not processes
     os.environ.setdefault('DMSH_PCH', '0')         # no precompiled Metal header: there is no Metal compiler
