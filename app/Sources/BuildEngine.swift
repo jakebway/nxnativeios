@@ -13,6 +13,24 @@ struct JobStatus: Decodable {
     var elapsed: Double?
     var k: Int?      // the step the build is on (1 ...)
     var n: Int?      // how many steps this build has
+    var free_gb: Double?   // free space on the phone now
+    var used_gb: Double?   // what this build has taken so far
+}
+
+/// The phone's storage, as the screens show it.
+enum Storage {
+    static func free() -> Int64 {
+        let v = try? Paths.support.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return v?.volumeAvailableCapacityForImportantUsage ?? 0
+    }
+    static func size(_ root: URL) -> Int64 {
+        var total: Int64 = 0
+        if let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.fileSizeKey]) {
+            for case let u as URL in e { total += Int64((try? u.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        }
+        return total
+    }
+    static func text(_ b: Int64) -> String { ByteCountFormatter.string(fromByteCount: b, countStyle: .file) }
 }
 
 @Observable @MainActor

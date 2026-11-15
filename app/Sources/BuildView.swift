@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 
 struct BuildView: View {
     @Environment(BuildEngine.self) private var engine
+    @State private var free: Int64 = 0
+    @State private var leftovers: Int64 = 0
 
     var body: some View {
         NavigationStack {
@@ -11,6 +13,7 @@ struct BuildView: View {
                 if engine.running { running } else { idle }
             }
             .navigationTitle("NXnativeiOS")
+            .task(id: engine.running) { await refreshStorage() }
         }
     }
 
@@ -28,6 +31,17 @@ struct BuildView: View {
             if engine.hasIcon { Button("Remove the icon", role: .destructive) { engine.clearIcon() } }
         } header: { Text("Icon") } footer: {
             Text("Used only when the game has no icon of its own (Switch 2 games carry none): any picture, JPEG or PNG. Games that have an icon keep theirs.")
+        }
+        if !engine.gameFiles.isEmpty || leftovers > 200_000_000 {
+            Section {
+                HStack { Label("Free space", systemImage: "internaldrive"); Spacer(); Text(Storage.text(free)).foregroundStyle(enoughSpace ? Color.secondary : Color.red) }
+                if needed > 0 { HStack { Text("This build needs about"); Spacer(); Text(Storage.text(needed)).foregroundStyle(.secondary) } }
+                if leftovers > 200_000_000 {
+                    Button { clearLeftovers() } label: { Label("Clear leftovers (\(Storage.text(leftovers)))", systemImage: "trash") }
+                }
+            } header: { Text("Storage") } footer: {
+                if !enoughSpace { Text("There may not be enough room. Free some space in Settings → General → iPhone Storage, or clear the leftovers above. The build gives its work files back as it goes.") }
+            }
         }
         Section {
             Button { engine.start() } label: { Label("Build IPA", systemImage: "hammer.fill").frame(maxWidth: .infinity) }
@@ -49,7 +63,7 @@ struct BuildView: View {
                         Text("\(min(k, n))/\(n)").font(.system(size: 44, weight: .semibold, design: .rounded)).monospacedDigit()
                     } else { Text("Starting").font(.system(size: 28, weight: .semibold, design: .rounded)) }
                     Spacer()
-                    Text(s?.stage ?? "Starting").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.trailing).lineLimit(2)
+                    Text(plain(s?.stage)).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.trailing).lineLimit(2)
                 }
                 if let k = s?.k, let n = s?.n, n > 0 {   // one segment per step: a step is done or it is not, nothing pretends to be 37 %
                     HStack(spacing: 4) {
@@ -61,6 +75,7 @@ struct BuildView: View {
                 TimelineView(.periodic(from: .now, by: 1)) { _ in Text("Elapsed \(clock(engine.startedAt.map { Date.now.timeIntervalSince($0) } ?? s?.elapsed))") }
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 if let d = s?.detail, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                if let u = s?.used_gb, let f = s?.free_gb { Text("Using \(String(format: "%.1f", u)) GB · \(String(format: "%.0f", f)) GB free").font(.caption).foregroundStyle(f < 8 ? Color.red : Color.secondary).monospacedDigit() }
             }.padding(.vertical, 4)
         } footer: { Text("You can leave the app: it keeps building. Big games take a while.") }
         logSection
@@ -138,6 +153,35 @@ struct BuildView: View {
     /// keys and a game, a .nup alone (Switch 2 games carry no encryption), or an archive (what is inside it is only known once it is opened)
     private var ready: Bool {
         !engine.gameFiles.isEmpty && (!engine.keyFiles.isEmpty || engine.gameFiles.contains { ext($0) == "nup" || ext($0) == "rar" || ext($0) == "zip" || isPart($0) })   // an archive may hold a .nup (or the keys): the build looks inside
+    }
+
+    private var needed: Int64 {   // the games' sizes times what a build takes at its peak (the app's own check refuses only below 1.5 times)
+        Int64(Double(engine.gameFiles.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }) * 2.4)
+    }
+    private var enoughSpace: Bool { needed == 0 || free >= needed }
+
+    private func refreshStorage() async {
+        free = Storage.free()
+        leftovers = await Task.detached { Storage.size(Paths.jobs) }.value
+    }
+
+    private func clearLeftovers() {
+        try? FileManager.default.removeItem(at: Paths.jobs)
+        try? FileManager.default.createDirectory(at: Paths.jobs, withIntermediateDirectories: true)
+        Task { await refreshStorage() }
+    }
+
+    /// the script's step names in plain words
+    private func plain(_ stage: String?) -> String {
+        let t = (stage ?? "").lowercased()
+        if t.isEmpty { return "Starting" }
+        if t.contains("unpack") || t.contains("extract") || t.contains("decompress") { return "Unpacking the game" }
+        if t.contains("check") { return "Checking the files" }
+        if t.contains("rewrite") { return "Preparing the game's code" }
+        if t.contains("shader split") { return "Finding the shaders" }
+        if t.contains("shaders") { return "Translating the shaders" }
+        if t.contains("pack") || t.contains("app build") { return "Packing the app" }
+        return stage ?? "Working"
     }
 
     private func ext(_ u: URL) -> String { u.pathExtension.lowercased() }

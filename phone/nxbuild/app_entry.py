@@ -285,10 +285,11 @@ def watch_disk(job, floor_gb=3.0):
         except Exception: pass
         time.sleep(60); os._exit(3)
     def loop():
-        t = 0
+        t = 0; start = cleanup.free_gb(job.dir)
         while True:
             try:
                 free = cleanup.free_gb(job.dir)
+                job.set(free_gb=round(free, 1), used_gb=round(max(0.0, start - free), 1))   # the app shows both while it builds
                 if time.time() - t >= 120 or free < 10:
                     t = time.time()
                     top = ', '.join(f'{n} {b / 1e9:.1f} GB' for n, b in cleanup.breakdown(job.dir)[:5] if b > 5e7)
